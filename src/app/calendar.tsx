@@ -1,0 +1,141 @@
+import { useMemo, useRef, useState } from "react";
+import { FlatList, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import CalendarGrid from "@/components/Calendar/CalendarGrid";
+import MonthLabel from "@/components/Calendar/MonthLabel";
+import WeekdayHeader, { WEEKDAY_HEADER_HEIGHT } from "@/components/Calendar/WeekdayHeader";
+import { buildMonthCells, formatDateKey } from "@/utils/calendarUtils";
+import { members, events } from "@/data/fakeData";
+
+// Free plan includes two previous calendar months and 24 future months.
+const PAST_MONTHS = 2;
+const FUTURE_MONTHS = 24;
+const VISIBLE_WEEKS = 5;
+const DIVIDER_HEIGHT = 48; // Extra breathing room above and below month labels.
+const SIDE_MARGIN = 10;
+
+type MonthItem = { key: string; year: number; monthIndex: number; height: number; offset: number };
+
+function CalendarWindow({ rowHeight }: { rowHeight: number }) {
+  const list = useRef<FlatList<MonthItem>>(null);
+  const [today] = useState(() => new Date());
+  const positioned = useRef(false);
+  const months = useMemo(() => {
+    let offset = 0;
+    return Array.from({ length: PAST_MONTHS + FUTURE_MONTHS + 1 }, (_, index) => {
+      const date = new Date(today.getFullYear(), today.getMonth() + index - PAST_MONTHS, 1);
+      const year = date.getFullYear();
+      const monthIndex = date.getMonth();
+      const height = buildMonthCells(year, monthIndex).length / 7 * rowHeight + DIVIDER_HEIGHT;
+      const item = { key: `${year}-${monthIndex}`, year, monthIndex, height, offset };
+      offset += height;
+      return item;
+    });
+  }, [rowHeight, today]);
+  const viewportHeight = rowHeight * VISIBLE_WEEKS + DIVIDER_HEIGHT;
+  const lastMonth = months[months.length - 1];
+  const maxOffset = lastMonth.offset + lastMonth.height - viewportHeight;
+  const currentMonth = months[PAST_MONTHS];
+  const todayWeek = Math.floor((new Date(currentMonth.year, currentMonth.monthIndex, 1).getDay() + today.getDate() - 1) / 7);
+  // Center the actual row, including the space taken by month dividers.
+  const initialOffset = Math.max(0, Math.min(maxOffset,
+    currentMonth.offset + DIVIDER_HEIGHT + (todayWeek + 0.5) * rowHeight - viewportHeight / 2,
+  ));
+  const offset = useRef(initialOffset);
+  const dragStart = useRef(0);
+  const moveTo = (y: number) => {
+    offset.current = Math.max(0, Math.min(maxOffset, y));
+    list.current?.scrollToOffset({ offset: offset.current, animated: false });
+  };
+  // Direct dragging deliberately has no release animation or momentum.
+  const pan = PanResponder.create({
+    onMoveShouldSetPanResponderCapture: (_, gesture) => Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderGrant: () => { dragStart.current = offset.current; },
+    onPanResponderMove: (_, gesture) => moveTo(dragStart.current - gesture.dy),
+  });
+
+  return (
+    <View style={{ width: rowHeight * 7 }}>
+      <WeekdayHeader />
+      <View {...pan.panHandlers} style={{ height: viewportHeight, overflow: "hidden" }}>
+        <FlatList
+          ref={list}
+          data={months}
+          keyExtractor={(item) => item.key}
+          contentOffset={{ x: 0, y: initialOffset }}
+          onContentSizeChange={() => {
+            if (!positioned.current) {
+              positioned.current = true;
+              moveTo(initialOffset);
+            }
+          }}
+          getItemLayout={(_, index) => ({ length: months[index].height, offset: months[index].offset, index })}
+          initialNumToRender={5}
+          windowSize={5}
+          scrollEnabled={Platform.OS === "web"}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          overScrollMode="never"
+          scrollEventThrottle={16}
+          onScroll={Platform.OS === "web" ? (event) => { offset.current = event.nativeEvent.contentOffset.y; } : undefined}
+          accessibilityActions={[{ name: "increment", label: "Later weeks" }, { name: "decrement", label: "Earlier weeks" }]}
+          onAccessibilityAction={({ nativeEvent }) => {
+            moveTo(offset.current + (nativeEvent.actionName === "increment" ? rowHeight : -rowHeight));
+          }}
+          renderItem={({ item }) => (
+            <View style={{ height: item.height }}>
+              <View className="justify-center" style={{ height: DIVIDER_HEIGHT }}>
+                <MonthLabel monthIndex={item.monthIndex} year={item.year} />
+              </View>
+              <CalendarGrid
+                  year={item.year} monthIndex={item.monthIndex} rowHeight={rowHeight}
+                  events={events} members={members}
+                  onDayPress={(date) => router.push({ pathname: "/day/[date]", params: { date: formatDateKey(date.getFullYear(), date.getMonth(), date.getDate()) } })}
+              />
+            </View>
+          )}
+        />
+        {/* Fixed edge shadows define the window without intercepting touches. */}
+        <View pointerEvents="none" style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 1,
+          backgroundColor: "rgba(41, 72, 110, 0.3)",
+          boxShadow: "0px 3px 5px 1px rgba(41, 72, 110, 0.25)",
+        }} />
+        <View pointerEvents="none" style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, height: 1,
+          backgroundColor: "rgba(41, 72, 110, 0.3)",
+          boxShadow: "0px -3px 5px 1px rgba(41, 72, 110, 0.25)",
+        }} />
+      </View>
+    </View>
+  );
+}
+
+export default function HomeScreen() {
+  const { height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const usableHeight = height - insets.top - insets.bottom;
+  // Use the available width for larger squares. On short screens, preserve
+  // the header space and at least 100 pixels for the Add Contact area.
+  const rowHeight = Math.max(1, Math.min(
+    (width - SIDE_MARGIN * 2) / 7,
+    (usableHeight * 0.8 - 100 - WEEKDAY_HEADER_HEIGHT - DIVIDER_HEIGHT) / VISIBLE_WEEKS,
+  ));
+
+  return (
+    <View className="flex-1 bg-country" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
+      <View style={{ height: usableHeight * 0.2 }} />
+      <View className="items-center">
+        <CalendarWindow key={rowHeight} rowHeight={rowHeight} />
+      </View>
+      <View className="flex-1 items-center justify-center">
+        <Pressable accessibilityRole="button" onPress={() => router.push("/add_event")}
+          className="bg-sunshine rounded-lg px-10 py-4 active:opacity-80"
+          style={{ boxShadow: "0px 2px 4px rgba(41, 72, 110, 0.18)" }}>
+          <Text className="text-graphite text-lg font-semibold">Add Contact</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}

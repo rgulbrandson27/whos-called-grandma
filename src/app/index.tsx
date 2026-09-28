@@ -1,98 +1,33 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useState } from "react";
+import { Redirect } from "expo-router";
+import { View } from "react-native";
+import { useOnboardingStore } from "@/store/onboarding-store";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
+// The onboarding draft is restored from local storage asynchronously, so we
+// have to wait for it before deciding where to send the user.
+function useDraftHydrated() {
+  const [hydrated, setHydrated] = useState(useOnboardingStore.persist.hasHydrated());
+  useEffect(() => {
+    const unsubscribe = useOnboardingStore.persist.onFinishHydration(() => setHydrated(true));
+    setHydrated(useOnboardingStore.persist.hasHydrated());
+    return unsubscribe;
+  }, []);
+  return hydrated;
 }
 
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+// Temporary entry point while building the onboarding flow.
+export default function IndexScreen() {
+  const hydrated = useDraftHydrated();
+  const circleId = useOnboardingStore((state) => state.circleId);
+  const lovedOneName = useOnboardingStore((state) => state.lovedOneName);
+  const subscriberName = useOnboardingStore((state) => state.subscriberName);
+  const subscriberColor = useOnboardingStore((state) => state.subscriberColor);
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+  if (!hydrated) return <View className="flex-1 bg-country" />;
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
-  );
+  // A plan was already chosen and the circle saved: skip onboarding.
+  if (circleId) return <Redirect href="/member-invites" />;
+  // Answers are saved but no plan chosen yet: pick up at the paywall.
+  if (lovedOneName && subscriberName && subscriberColor) return <Redirect href="/paywall" />;
+  return <Redirect href="/welcome" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
-});
