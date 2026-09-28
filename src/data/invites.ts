@@ -18,7 +18,7 @@ export async function saveInviteMembers(circleId: string, draft: InviteDraft) {
     .from("circle_members")
     .delete()
     .eq("circle_id", circleId)
-    .neq("role", "subscriber");
+    .neq("role", "owner");
   if (deleteError) throw deleteError;
 
   const rows = draft.inviteNames

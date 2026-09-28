@@ -10,7 +10,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from "react-native-svg";
-import { CIRCLE_COLORS } from "@/constants/circle-colors";
+import { BASE_COLOR_COUNT, CIRCLE_COLORS } from "@/constants/circle-colors";
 import { darken, lighten } from "@/utils/color";
 
 // A flower whose petals are the circle colors. One petal per entry in
@@ -37,8 +37,12 @@ export function ColorFlower({
   // Width and height of the flower itself (the color name sits below it).
   size?: number;
 }) {
-  const count = CIRCLE_COLORS.length;
-  const petals = CIRCLE_COLORS.map((color, i) => ({ ...color, i, angle: (360 / count) * i }));
+  // Capped at the base palette — this picker (currently unused, see
+  // subscriber-color.tsx) predates the 12 premium-only shades, and was
+  // designed around a small petal count.
+  const flowerColors = CIRCLE_COLORS.slice(0, BASE_COLOR_COUNT);
+  const count = flowerColors.length;
+  const petals = flowerColors.map((color, i) => ({ ...color, i, angle: (360 / count) * i }));
   const selectedIndex = petals.findIndex((p) => p.hex === value);
   // The chosen petal is drawn last so it sits on top of its neighbors.
   const drawOrder = [

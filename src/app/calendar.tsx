@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { FlatList, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import Svg, { Circle, Path } from "react-native-svg";
 import CalendarGrid from "@/components/Calendar/CalendarGrid";
 import MonthLabel from "@/components/Calendar/MonthLabel";
 import WeekdayHeader, { WEEKDAY_HEADER_HEIGHT } from "@/components/Calendar/WeekdayHeader";
@@ -125,6 +126,25 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-country" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Settings"
+        onPress={() => router.push("/settings")}
+        className="absolute items-center justify-center active:opacity-70"
+        style={{ top: insets.top + 8, right: 16, width: 44, height: 44, zIndex: 1 }}
+      >
+        <Svg width={24} height={24} viewBox="0 0 24 24" accessible={false}>
+          <Circle cx={12} cy={12} r={3} fill="none" stroke="#29486E" strokeWidth={2} />
+          <Path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+            fill="none"
+            stroke="#29486E"
+            strokeWidth={1.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </Pressable>
       <View style={{ height: usableHeight * 0.2 }} />
       <View className="items-center">
         <CalendarWindow key={rowHeight} rowHeight={rowHeight} />

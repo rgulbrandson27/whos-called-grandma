@@ -19,7 +19,11 @@ export const TIERS: Record<
     monthly: 2.99,
     annual: 20.99,
     annualDiscount: "Save 40%",
-    features: ["Up to 6 people in your circle"],
+    features: [
+      "Up to 6 people in your circle",
+      "Shared family calendar",
+      "Simple check-in log",
+    ],
   },
   premium: {
     label: "Premium",
@@ -27,25 +31,12 @@ export const TIERS: Record<
     annual: 35.99,
     annualDiscount: "Save 50%",
     features: [
-      "Everything in Basic",
       "Up to 20 people in your circle",
-      "Add photos to check-ins",
-      "Longer custom notes",
-      "Customizable notification settings",
-      "Notification frequency",
+      "Shared family calendar",
+      "Label how you connected (call, visit, etc.)",
+      "Add a short note to a check-in",
     ],
   },
 };
 
 export const formatPrice = (amount: number) => `$${amount.toFixed(2)}`;
-
-// Rows of the "Compare plans" table under the plan picker on the paywall.
-// A string shows as text; true / false show a check / an X.
-export const COMPARISON_ROWS: { label: string; basic: string | boolean; premium: string | boolean }[] = [
-  { label: "People in your circle", basic: "Up to 6", premium: "Up to 20" },
-  { label: "Shared family calendar", basic: true, premium: true },
-  { label: "Photos on check-ins", basic: false, premium: true },
-  { label: "Longer custom notes", basic: false, premium: true },
-  { label: "Custom notification settings", basic: false, premium: true },
-  { label: "Notification frequency", basic: false, premium: true },
-];

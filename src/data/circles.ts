@@ -33,7 +33,8 @@ export async function createCircle(draft: NewCircle): Promise<string> {
     display_name: draft.subscriberName,
     color: draft.subscriberColor,
     shape: "circle",
-    role: "subscriber",
+    // circle_members_role_check only allows 'owner' | 'member'.
+    role: "owner",
     invite_status: "accepted",
     accepted_at: new Date().toISOString(),
     // "sunday" / "monday" — the same words the app uses internally, saved as-is.
@@ -51,4 +52,41 @@ export async function createCircle(draft: NewCircle): Promise<string> {
 export async function updateCirclePlan(circleId: string, plan: PlanId) {
   const { error } = await supabase.from("circles").update({ plan }).eq("id", circleId);
   if (error) throw error;
+}
+
+// Add fields here as screens need them.
+export async function getCircleSummary(
+  circleId: string,
+): Promise<{ plan: PlanId; lovedOneName: string }> {
+  const { data, error } = await supabase
+    .from("circles")
+    .select("plan, loved_one_name")
+    .eq("id", circleId)
+    .single();
+  if (error) throw error;
+  return { plan: data.plan as PlanId, lovedOneName: data.loved_one_name };
+}
+
+// Deletes the circle and everything under it. There's no ON DELETE CASCADE
+// assumed here — children are removed explicitly before the parent row.
+// Used by the in-app "Delete my circle" action (App Store 5.1.1(v): apps that
+// store personal data need an in-app way to delete it, not just support email).
+export async function deleteCircle(circleId: string): Promise<void> {
+  const { error: eventsError } = await supabase
+    .from("events")
+    .delete()
+    .eq("circle_id", circleId);
+  if (eventsError) throw eventsError;
+
+  const { error: membersError } = await supabase
+    .from("circle_members")
+    .delete()
+    .eq("circle_id", circleId);
+  if (membersError) throw membersError;
+
+  const { error: circleError } = await supabase
+    .from("circles")
+    .delete()
+    .eq("id", circleId);
+  if (circleError) throw circleError;
 }

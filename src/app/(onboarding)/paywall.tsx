@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import { ActivityIndicator, Alert, LayoutChangeEvent, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useOnboardingStore } from "@/store/onboarding-store";
-import { COMPARISON_ROWS, formatPrice, PlanBilling, PlanId, PlanTier, TIERS } from "@/constants/plans";
+import { formatPrice, PlanBilling, PlanId, PlanTier, TIERS } from "@/constants/plans";
 import { createCircle, updateCirclePlan } from "@/data/circles";
 import { saveInviteMembers } from "@/data/invites";
 import { confirmDevReset } from "@/utils/dev-reset";
@@ -12,23 +12,20 @@ import { possessive } from "@/utils/text";
 
 
 const HIGHLIGHTS = [
-  "Room for up to 20 people",
-  "Photos on check-ins",
-  "Notifications your way",
+  "Shared family calendar for everyone in your circle",
+  "Basic: up to 6 people, a simple check-in log",
+  "Premium: up to 20 people, label how you connected and add a short note",
 ];
+
+const TERMS_URL =
+  "https://sites.google.com/view/rainzbuilds/whos-called-grandma/terms-and-conditions";
+const PRIVACY_URL =
+  "https://sites.google.com/view/rainzbuilds/whos-called-grandma/privacy-policy";
 
 function CheckIcon({ size = 18, color = "#29486E" }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" accessible={false}>
       <Path d="M5 13l4 4L19 7" fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
-function CrossIcon({ size = 16 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" accessible={false}>
-      <Path d="M6 6l12 12M18 6L6 18" fill="none" stroke="rgba(36, 36, 40, 0.35)" strokeWidth={2.5} strokeLinecap="round" />
     </Svg>
   );
 }
@@ -109,13 +106,6 @@ function PlanOption({
   );
 }
 
-function ComparisonCell({ value, premium }: { value: string | boolean; premium?: boolean }) {
-  if (typeof value === "string") {
-    return <Text className="text-graphite text-xs font-semibold text-center">{value}</Text>;
-  }
-  return value ? <CheckIcon size={16} color={premium ? "#29486E" : "#242428"} /> : <CrossIcon />;
-}
-
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const draft = useOnboardingStore();
@@ -125,11 +115,6 @@ export default function PaywallScreen() {
   // Continuing from the circle page always starts on Basic annual.
   const [tier, setTier] = useState<PlanTier>(draft.wantsMorePeople ? "premium" : "basic");
   const [saving, setSaving] = useState(false);
-  // Measured so the plan picker can sit at the bottom of the first screen and
-  // then pin to the top while the comparison table scrolls underneath it.
-  const [viewportHeight, setViewportHeight] = useState(0);
-  const [pickerHeight, setPickerHeight] = useState(0);
-  const firstScreenSpace = Math.max(0, viewportHeight - pickerHeight);
 
   const handleContinue = async () => {
     if (saving) return;
@@ -164,12 +149,13 @@ export default function PaywallScreen() {
     }
   };
 
-  const handleLegalPress = (doc: string) => {
-    Alert.alert("Coming soon", `${doc} isn't written yet.`);
+  const handleLegalPress = async (doc: string, url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Couldn't open link", `Please try again to view the ${doc}.`);
+    }
   };
-
-  const handleLayoutViewport = (e: LayoutChangeEvent) => setViewportHeight(e.nativeEvent.layout.height);
-  const handleLayoutPicker = (e: LayoutChangeEvent) => setPickerHeight(e.nativeEvent.layout.height);
 
   return (
     <View
@@ -195,42 +181,29 @@ export default function PaywallScreen() {
           </Svg>
         </Pressable>
       </View>
-      {/* Child 0: heading + highlights, sized so child 1 (the plan picker) lands
-          at the bottom of the first screen. Child 1 is sticky: it pins to the top
-          once you scroll past it, so the four plans are always in view. Child 2
-          (the comparison table) scrolls underneath. */}
       <ScrollView
         style={{ flex: 1 }}
-        onLayout={handleLayoutViewport}
-        stickyHeaderIndices={[1]}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ minHeight: firstScreenSpace }}>
-          {/* onLongPress: development builds only, wipes saved data for testing. */}
-          <Text
-            onLongPress={__DEV__ ? confirmDevReset : undefined}
-            className="text-[#241E38] text-2xl font-bold text-center px-6 mt-4"
-          >
-            Choose a plan for {lovedOneName ? possessive(lovedOneName) : "your"} circle.
-          </Text>
-          <View className="px-8 mt-6" style={{ gap: 10 }}>
-            {HIGHLIGHTS.map((line) => (
-              <View key={line} className="flex-row items-center" style={{ gap: 10 }}>
-                <CheckIcon />
-                <Text className="text-graphite text-base flex-1">{line}</Text>
-              </View>
-            ))}
-          </View>
-          <Text className="text-graphite/60 text-xs text-center px-8 mt-6">
-            Your answers are saved. Take your time.
-          </Text>
+        {/* onLongPress: development builds only, wipes saved data for testing. */}
+        <Text
+          onLongPress={__DEV__ ? confirmDevReset : undefined}
+          className="text-[#241E38] text-3xl font-bold text-center px-6 mt-4"
+        >
+          {"Choose a plan for\n"}
+          {lovedOneName ? possessive(lovedOneName) : "your"} circle.
+        </Text>
+        <View className="px-8 mt-6" style={{ gap: 10 }}>
+          {HIGHLIGHTS.map((line) => (
+            <View key={line} className="flex-row items-center" style={{ gap: 10 }}>
+              <CheckIcon />
+              <Text className="text-graphite text-base flex-1">{line}</Text>
+            </View>
+          ))}
         </View>
 
-        <View
-          onLayout={handleLayoutPicker}
-          className="bg-country px-4 pt-4 pb-3"
-          style={{ boxShadow: "0px 4px 8px rgba(36, 36, 40, 0.08)" }}
-        >
+        <View className="px-4 mt-8">
           <View className="flex-row" style={{ gap: 12 }}>
             {(Object.keys(TIERS) as PlanTier[]).map((id) => (
               <View
@@ -254,56 +227,37 @@ export default function PaywallScreen() {
               </View>
             ))}
           </View>
-          <Pressable
-            accessibilityRole="button"
-            disabled={saving}
-            onPress={handleContinue}
-            className="w-full items-center rounded-lg py-4 mt-4 bg-ink active:opacity-80"
-          >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text className="text-xl font-semibold text-white">Select plan</Text>
-            )}
-          </Pressable>
-          <View className="flex-row justify-center mt-3" style={{ gap: 6 }}>
-            <Pressable onPress={() => handleLegalPress("Terms of Use")}>
-              <Text className="text-graphite/60 text-xs underline">Terms of Use</Text>
-            </Pressable>
-            <Text className="text-graphite/60 text-xs">&amp;</Text>
-            <Pressable onPress={() => handleLegalPress("Privacy Policy")}>
-              <Text className="text-graphite/60 text-xs underline">Privacy Policy</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* At least as tall as the space above the picker, so there's always
-            enough to scroll for the picker to reach the top. */}
-        <View className="px-4 pt-6" style={{ minHeight: firstScreenSpace, paddingBottom: 24 }}>
-          <Text className="text-graphite/70 text-center text-sm font-semibold mb-3">Compare plans</Text>
-          <View className="rounded-2xl bg-white/70 overflow-hidden">
-            <View className="flex-row items-center px-4 py-3 border-b border-graphite/10">
-              <View className="flex-1" />
-              <Text className="text-graphite text-xs font-bold text-center" style={{ width: 72 }}>Basic</Text>
-              <Text className="text-graphite text-xs font-bold text-center" style={{ width: 72 }}>Premium</Text>
-            </View>
-            {COMPARISON_ROWS.map((row, i) => (
-              <View
-                key={row.label}
-                className={`flex-row items-center px-4 py-3 ${i < COMPARISON_ROWS.length - 1 ? "border-b border-graphite/10" : ""}`}
-              >
-                <Text className="text-graphite text-sm flex-1 pr-2">{row.label}</Text>
-                <View className="items-center" style={{ width: 72 }}>
-                  <ComparisonCell value={row.basic} />
-                </View>
-                <View className="items-center" style={{ width: 72 }}>
-                  <ComparisonCell value={row.premium} premium />
-                </View>
-              </View>
-            ))}
-          </View>
         </View>
       </ScrollView>
+      <View className="px-4 pt-3">
+        <Text className="text-graphite/60 text-[11px] text-center px-4 mb-2">
+          {TIERS[tier].label} ({billing === "annual" ? "yearly" : "monthly"})
+          renews automatically at {formatPrice(billing === "annual" ? TIERS[tier].annual : TIERS[tier].monthly)}
+          /{billing === "annual" ? "yr" : "mo"} until canceled. Manage or cancel anytime in your
+          Apple ID account settings.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          disabled={saving}
+          onPress={handleContinue}
+          className="w-full items-center rounded-lg py-4 bg-ink active:opacity-80"
+        >
+          {saving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text className="text-xl font-semibold text-white">Select plan</Text>
+          )}
+        </Pressable>
+        <View className="flex-row justify-center mt-3 mb-1" style={{ gap: 6 }}>
+          <Pressable onPress={() => handleLegalPress("Terms of Use", TERMS_URL)}>
+            <Text className="text-graphite/60 text-xs underline">Terms of Use</Text>
+          </Pressable>
+          <Text className="text-graphite/60 text-xs">&amp;</Text>
+          <Pressable onPress={() => handleLegalPress("Privacy Policy", PRIVACY_URL)}>
+            <Text className="text-graphite/60 text-xs underline">Privacy Policy</Text>
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 }

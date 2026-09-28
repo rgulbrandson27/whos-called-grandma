@@ -6,7 +6,6 @@ export type Member = {
   userId: string | null;
   name: string;
   phone: string | null;
-  email: string | null;
   color: string;
   shape: string;
   role: string;
@@ -35,10 +34,9 @@ export const members: Member[] = [
     userId: "u1",
     name: "Raina",
     phone: "(555) 111-2222",
-    email: null,
     color: "#E4572E",
     shape: "circle",
-    role: "subscriber",
+    role: "owner",
     inviteStatus: "accepted",
     invitedAt: "2026-09-01T00:00:00.000Z",
     acceptedAt: "2026-09-01T00:00:00.000Z",
@@ -49,7 +47,6 @@ export const members: Member[] = [
     userId: "u2",
     name: "Bob",
     phone: "(555) 222-3333",
-    email: null,
     color: "#3A86FF",
     shape: "circle",
     role: "member",
@@ -63,7 +60,6 @@ export const members: Member[] = [
     userId: "u3",
     name: "Anastacia",
     phone: "(555) 333-4444",
-    email: null,
     color: "#8338EC",
     shape: "circle",
     role: "member",
