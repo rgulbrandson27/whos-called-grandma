@@ -49,6 +49,17 @@ export async function removeMember(memberId: string): Promise<void> {
   if (error) throw error;
 }
 
+// Expo push token for this member's current device — see
+// src/utils/push-notifications.ts. Overwrites any previous token, since a
+// person only really has one active device at a time in this app.
+export async function setPushToken(memberId: string, token: string): Promise<void> {
+  const { error } = await supabase
+    .from("circle_members")
+    .update({ push_token: token })
+    .eq("id", memberId);
+  if (error) throw error;
+}
+
 // TEMP stand-in until there's a real invite/accept flow (needs actually
 // sending a text and a screen for the invitee to open on their own phone).
 // Marks a pending member accepted, keeping the color already reserved for

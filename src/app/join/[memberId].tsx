@@ -18,6 +18,7 @@ import { ROLES } from "@/constants/relationship-roles";
 import { acceptInvite, getInvitePreview } from "@/data/invite";
 import { useOnboardingStore, type WeekStart } from "@/store/onboarding-store";
 import { possessive } from "@/utils/text";
+import { registerForPushNotifications } from "@/utils/push-notifications";
 
 type Step = "color" | "calendar" | "relationship";
 
@@ -25,6 +26,7 @@ export default function JoinCircleScreen() {
   const insets = useSafeAreaInsets();
   const { memberId } = useLocalSearchParams<{ memberId: string }>();
   const setCircleId = useOnboardingStore((state) => state.setCircleId);
+  const setMyMemberId = useOnboardingStore((state) => state.setMyMemberId);
 
   const [lovedOneName, setLovedOneName] = useState("");
   const [availableColors, setAvailableColors] = useState<
@@ -45,6 +47,7 @@ export default function JoinCircleScreen() {
       .then((preview) => {
         if (preview.alreadyAccepted) {
           setCircleId(preview.circleId);
+          setMyMemberId(memberId);
           router.replace("/calendar");
           return;
         }
@@ -75,6 +78,8 @@ export default function JoinCircleScreen() {
         relationship: finalRelationship,
       });
       setCircleId(circleId);
+      setMyMemberId(memberId);
+      registerForPushNotifications(memberId);
       router.replace("/calendar");
     } catch (e) {
       setSaving(false);

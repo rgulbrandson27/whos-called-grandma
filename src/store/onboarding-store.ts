@@ -47,6 +47,11 @@ type OnboardingStore = OnboardingDraft & {
   // login, this is how the device finds its circle again.
   circleId: string | null;
   setCircleId: (id: string | null) => void;
+  // This device's own circle_members row id — the owner's, or an invitee's
+  // once they accept via join/[memberId].tsx. Used to know which row to
+  // attach this device's push token to.
+  myMemberId: string | null;
+  setMyMemberId: (id: string | null) => void;
   setLovedOneName: (name: string) => void;
   setLovedOneBirthday: (month: number | null, day: number | null) => void;
   setSubscriberName: (name: string) => void;
@@ -83,6 +88,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
   ...initialDraft,
   circleId: null,
   setCircleId: (circleId) => set({ circleId }),
+  myMemberId: null,
+  setMyMemberId: (myMemberId) => set({ myMemberId }),
   setLovedOneName: (lovedOneName) => set({ lovedOneName }),
   setLovedOneBirthday: (lovedOneBirthdayMonth, lovedOneBirthdayDay) =>
     set({ lovedOneBirthdayMonth, lovedOneBirthdayDay }),

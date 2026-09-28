@@ -14,8 +14,11 @@ type NewCircle = {
 
 // Writes the onboarding draft to Supabase: the circle plus the subscriber's own
 // member row. There is no login, so subscriber_user_id / user_id stay null —
-// the caller keeps the returned id in local storage to find the circle again.
-export async function createCircle(draft: NewCircle): Promise<string> {
+// the caller keeps the returned ids in local storage to find the circle
+// (and this device's own member row) again.
+export async function createCircle(
+  draft: NewCircle,
+): Promise<{ circleId: string; ownerMemberId: string }> {
   const { data: circle, error } = await supabase
     .from("circles")
     .insert({
@@ -28,25 +31,29 @@ export async function createCircle(draft: NewCircle): Promise<string> {
     .single();
   if (error) throw error;
 
-  const { error: memberError } = await supabase.from("circle_members").insert({
-    circle_id: circle.id,
-    display_name: draft.subscriberName,
-    color: draft.subscriberColor,
-    shape: "circle",
-    // circle_members_role_check only allows 'owner' | 'member'.
-    role: "owner",
-    invite_status: "accepted",
-    accepted_at: new Date().toISOString(),
-    // "sunday" / "monday" — the same words the app uses internally, saved as-is.
-    week_start_day: draft.subscriberWeekStart,
-  });
+  const { data: member, error: memberError } = await supabase
+    .from("circle_members")
+    .insert({
+      circle_id: circle.id,
+      display_name: draft.subscriberName,
+      color: draft.subscriberColor,
+      shape: "circle",
+      // circle_members_role_check only allows 'owner' | 'member'.
+      role: "owner",
+      invite_status: "accepted",
+      accepted_at: new Date().toISOString(),
+      // "sunday" / "monday" — the same words the app uses internally, saved as-is.
+      week_start_day: draft.subscriberWeekStart,
+    })
+    .select("id")
+    .single();
   if (memberError) {
     // Don't leave a circle with no subscriber behind (best effort).
     await supabase.from("circles").delete().eq("id", circle.id);
     throw memberError;
   }
 
-  return circle.id;
+  return { circleId: circle.id, ownerMemberId: member.id };
 }
 
 export async function updateCirclePlan(circleId: string, plan: PlanId) {

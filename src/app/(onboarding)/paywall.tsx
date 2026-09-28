@@ -8,6 +8,7 @@ import { formatPrice, PlanBilling, PlanId, PlanTier, TIERS } from "@/constants/p
 import { createCircle, updateCirclePlan } from "@/data/circles";
 import { saveInviteMembers } from "@/data/invites";
 import { confirmDevReset } from "@/utils/dev-reset";
+import { registerForPushNotifications } from "@/utils/push-notifications";
 import { possessive } from "@/utils/text";
 
 
@@ -127,7 +128,7 @@ export default function PaywallScreen() {
       if (circleId) {
         await updateCirclePlan(circleId, plan);
       } else {
-        circleId = await createCircle({
+        const created = await createCircle({
           lovedOneName: draft.lovedOneName,
           lovedOneBirthdayMonth: draft.lovedOneBirthdayMonth,
           lovedOneBirthdayDay: draft.lovedOneBirthdayDay,
@@ -136,7 +137,10 @@ export default function PaywallScreen() {
           subscriberWeekStart: draft.weekStart,
           plan,
         });
+        circleId = created.circleId;
         draft.setCircleId(circleId);
+        draft.setMyMemberId(created.ownerMemberId);
+        registerForPushNotifications(created.ownerMemberId);
       }
       // The people added on the create-circle screen — saved here, once the
       // circle itself exists.
