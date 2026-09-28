@@ -21,6 +21,7 @@ export default function CalendarGrid({ year, monthIndex, rowHeight, events, memb
             <DaySquare
               key={cell.dateKey ?? `blank-${column}`}
               date={cell.day === null ? null : new Date(year, monthIndex, cell.day)}
+              rowHeight={rowHeight}
               events={cell.dateKey ? events.filter((event) => event.date === cell.dateKey) : []}
               members={members}
               onPress={onDayPress}

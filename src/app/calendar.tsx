@@ -1,31 +1,49 @@
-import { useMemo, useRef, useState } from "react";
-import { FlatList, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFonts } from "expo-font";
+import { ActivityIndicator, FlatList, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Svg, { Circle, Path } from "react-native-svg";
 import CalendarGrid from "@/components/Calendar/CalendarGrid";
 import MonthLabel from "@/components/Calendar/MonthLabel";
 import WeekdayHeader, { WEEKDAY_HEADER_HEIGHT } from "@/components/Calendar/WeekdayHeader";
+import type { PlanTier } from "@/constants/plans";
+import { getCircleSummary } from "@/data/circles";
+import { getEvents } from "@/data/events";
+import type { CalendarEvent, Member } from "@/data/fakeData";
+import { getMembers } from "@/data/members";
+import { useOnboardingStore } from "@/store/onboarding-store";
 import { buildMonthCells, formatDateKey } from "@/utils/calendarUtils";
-import { members, events } from "@/data/fakeData";
+import { possessive } from "@/utils/text";
 
-// Free plan includes two previous calendar months and 24 future months.
-const PAST_MONTHS = 2;
-const FUTURE_MONTHS = 24;
+// Basic can browse a month either side of today; Premium gets a full year.
+const monthRangeForTier = (tier: PlanTier) => (tier === "premium" ? 12 : 1);
 const VISIBLE_WEEKS = 5;
 const DIVIDER_HEIGHT = 48; // Extra breathing room above and below month labels.
 const SIDE_MARGIN = 10;
 
 type MonthItem = { key: string; year: number; monthIndex: number; height: number; offset: number };
 
-function CalendarWindow({ rowHeight }: { rowHeight: number }) {
+function CalendarWindow({
+  rowHeight,
+  pastMonths,
+  futureMonths,
+  events,
+  members,
+}: {
+  rowHeight: number;
+  pastMonths: number;
+  futureMonths: number;
+  events: CalendarEvent[];
+  members: Member[];
+}) {
   const list = useRef<FlatList<MonthItem>>(null);
   const [today] = useState(() => new Date());
   const positioned = useRef(false);
   const months = useMemo(() => {
     let offset = 0;
-    return Array.from({ length: PAST_MONTHS + FUTURE_MONTHS + 1 }, (_, index) => {
-      const date = new Date(today.getFullYear(), today.getMonth() + index - PAST_MONTHS, 1);
+    return Array.from({ length: pastMonths + futureMonths + 1 }, (_, index) => {
+      const date = new Date(today.getFullYear(), today.getMonth() + index - pastMonths, 1);
       const year = date.getFullYear();
       const monthIndex = date.getMonth();
       const height = buildMonthCells(year, monthIndex).length / 7 * rowHeight + DIVIDER_HEIGHT;
@@ -33,11 +51,11 @@ function CalendarWindow({ rowHeight }: { rowHeight: number }) {
       offset += height;
       return item;
     });
-  }, [rowHeight, today]);
+  }, [rowHeight, today, pastMonths, futureMonths]);
   const viewportHeight = rowHeight * VISIBLE_WEEKS + DIVIDER_HEIGHT;
   const lastMonth = months[months.length - 1];
   const maxOffset = lastMonth.offset + lastMonth.height - viewportHeight;
-  const currentMonth = months[PAST_MONTHS];
+  const currentMonth = months[pastMonths];
   const todayWeek = Math.floor((new Date(currentMonth.year, currentMonth.monthIndex, 1).getDay() + today.getDate() - 1) / 7);
   // Center the actual row, including the space taken by month dividers.
   const initialOffset = Math.max(0, Math.min(maxOffset,
@@ -116,6 +134,35 @@ function CalendarWindow({ rowHeight }: { rowHeight: number }) {
 export default function HomeScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const circleId = useOnboardingStore((state) => state.circleId);
+
+  const [members, setMembers] = useState<Member[] | null>(null);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [tier, setTier] = useState<PlanTier>("basic");
+  const [lovedOneName, setLovedOneName] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!circleId) {
+      setLoadError("No circle found for this device.");
+      return;
+    }
+    Promise.all([getCircleSummary(circleId), getMembers(circleId), getEvents(circleId)])
+      .then(([summary, memberRows, eventRows]) => {
+        setTier(summary.plan.split("_")[0] as PlanTier);
+        setLovedOneName(summary.lovedOneName);
+        setMembers(memberRows);
+        setEvents(eventRows);
+      })
+      .catch((e) =>
+        setLoadError(e instanceof Error ? e.message : "Couldn't load your circle."),
+      );
+  }, [circleId]);
+
+  const [fontsLoaded, fontError] = useFonts({
+    CaveatRegular: require("../../assets/fonts/Caveat-Regular.ttf"),
+  });
+
   const usableHeight = height - insets.top - insets.bottom;
   // Use the available width for larger squares. On short screens, preserve
   // the header space and at least 100 pixels for the Add Contact area.
@@ -123,6 +170,7 @@ export default function HomeScreen() {
     (width - SIDE_MARGIN * 2) / 7,
     (usableHeight * 0.8 - 100 - WEEKDAY_HEADER_HEIGHT - DIVIDER_HEIGHT) / VISIBLE_WEEKS,
   ));
+  const monthRange = monthRangeForTier(tier);
 
   return (
     <View className="flex-1 bg-country" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
@@ -145,17 +193,55 @@ export default function HomeScreen() {
           />
         </Svg>
       </Pressable>
-      <View style={{ height: usableHeight * 0.2 }} />
-      <View className="items-center">
-        <CalendarWindow key={rowHeight} rowHeight={rowHeight} />
-      </View>
-      <View className="flex-1 items-center justify-center">
-        <Pressable accessibilityRole="button" onPress={() => router.push("/add_event")}
-          className="bg-sunshine rounded-lg px-10 py-4 active:opacity-80"
-          style={{ boxShadow: "0px 2px 4px rgba(41, 72, 110, 0.18)" }}>
-          <Text className="text-graphite text-lg font-semibold">Add Contact</Text>
-        </Pressable>
-      </View>
+
+      {loadError && (
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-graphite/70 text-center text-sm">{loadError}</Text>
+        </View>
+      )}
+
+      {!members && !loadError && (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#29486E" />
+        </View>
+      )}
+
+      {members && (
+        <>
+          <View style={{ height: usableHeight * 0.12 }} />
+          {(fontsLoaded || fontError) && (
+            <Text
+              className="text-[#241E38] text-center px-8"
+              style={{
+                fontFamily: fontsLoaded ? "CaveatRegular" : undefined,
+                fontSize: 30,
+                lineHeight: 38,
+              }}
+            >
+              {lovedOneName
+                ? `Keeping ${possessive(lovedOneName)} circle close.`
+                : "Keeping your circle close."}
+            </Text>
+          )}
+          <View className="items-center" style={{ marginTop: usableHeight * 0.03 }}>
+            <CalendarWindow
+              key={`${rowHeight}-${monthRange}`}
+              rowHeight={rowHeight}
+              pastMonths={monthRange}
+              futureMonths={monthRange}
+              events={events}
+              members={members}
+            />
+          </View>
+          <View className="flex-1 items-center justify-center">
+            <Pressable accessibilityRole="button" onPress={() => router.push("/add_event")}
+              className="bg-sunshine rounded-lg px-10 py-4 active:opacity-80"
+              style={{ boxShadow: "0px 2px 4px rgba(41, 72, 110, 0.18)" }}>
+              <Text className="text-graphite text-lg font-semibold">Add Contact</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
     </View>
   );
 }
