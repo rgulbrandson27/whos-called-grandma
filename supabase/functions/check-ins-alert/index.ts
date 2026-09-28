@@ -8,10 +8,16 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const ALERT_THRESHOLD_DAYS = 3;
 
 Deno.serve(async () => {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
+  // Supabase's newer key system auto-injects SUPABASE_SECRET_KEYS (a JSON
+  // dictionary) instead of the legacy single SUPABASE_SERVICE_ROLE_KEY
+  // string — this project is on the new system, so the legacy var isn't
+  // populated with a working key. Falls back to the legacy var just in case.
+  const secretKeysRaw = Deno.env.get("SUPABASE_SECRET_KEYS");
+  const secretKey = secretKeysRaw
+    ? JSON.parse(secretKeysRaw).default
+    : Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, secretKey);
 
   const { data: circles, error: circlesError } = await supabase
     .from("circles")
