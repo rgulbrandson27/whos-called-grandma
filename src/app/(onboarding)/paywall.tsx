@@ -8,6 +8,7 @@ import { formatPrice, PlanBilling, PlanId, PlanTier, TIERS } from "@/constants/p
 import { createCircle, updateCirclePlan } from "@/data/circles";
 import { saveInviteMembers } from "@/data/invites";
 import { confirmDevReset } from "@/utils/dev-reset";
+import { purchasePlan, restorePurchases } from "@/utils/purchases";
 import { registerForPushNotifications } from "@/utils/push-notifications";
 import { possessive } from "@/utils/text";
 
@@ -122,8 +123,17 @@ export default function PaywallScreen() {
     const plan: PlanId = `${tier}_${billing}`;
     setSaving(true);
     try {
-      // No purchase flow wired up yet (RevenueCat) — this just records the
-      // chosen plan. Coming back from member-invites reuses the saved circle.
+      // The actual charge happens here, before anything is recorded — on
+      // web there's no store to buy through, so this is a no-op there.
+      const purchase = await purchasePlan(plan);
+      if (!purchase.success) {
+        // Cancelled from the native purchase sheet — not an error, just
+        // back to the paywall with nothing recorded.
+        setSaving(false);
+        return;
+      }
+
+      // Coming back from member-invites reuses the already-saved circle.
       let circleId = draft.circleId;
       if (circleId) {
         await updateCirclePlan(circleId, plan);
@@ -147,7 +157,7 @@ export default function PaywallScreen() {
       await saveInviteMembers(circleId, draft);
       router.replace("/member-invites");
     } catch (e) {
-      Alert.alert("Couldn't save your circle", e instanceof Error ? e.message : "Please try again.");
+      Alert.alert("Couldn't complete that", e instanceof Error ? e.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -158,6 +168,22 @@ export default function PaywallScreen() {
       await Linking.openURL(url);
     } catch {
       Alert.alert("Couldn't open link", `Please try again to view the ${doc}.`);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await restorePurchases();
+      Alert.alert("Restored", "Your previous purchase has been restored.");
+    } catch (e) {
+      Alert.alert(
+        "Couldn't restore purchases",
+        e instanceof Error ? e.message : "Please try again.",
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -261,6 +287,11 @@ export default function PaywallScreen() {
             <Text className="text-graphite/60 text-xs underline">Privacy Policy</Text>
           </Pressable>
         </View>
+        <Pressable onPress={handleRestore} className="items-center mt-2">
+          <Text className="text-graphite/60 text-xs underline">
+            Restore purchases
+          </Text>
+        </Pressable>
       </View>
     </View>
   );

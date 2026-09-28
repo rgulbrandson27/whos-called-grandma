@@ -1,0 +1,67 @@
+import { Platform } from "react-native";
+import Purchases from "react-native-purchases";
+import type { PlanId } from "@/constants/plans";
+
+// RevenueCat has no purchase mechanism on web — every call here is a no-op
+// there, and the paywall skips straight to recording the plan.
+const SUPPORTED = Platform.OS === "ios" || Platform.OS === "android";
+
+// Call once, as early as possible (see src/app/_layout.tsx).
+export function configurePurchases(): void {
+  if (!SUPPORTED) return;
+  const apiKey = Platform.select({
+    ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY,
+    android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY,
+  });
+  if (!apiKey) {
+    console.warn(
+      "RevenueCat API key missing (EXPO_PUBLIC_REVENUECAT_IOS_KEY / _ANDROID_KEY) — purchases will fail until it's set in .env.",
+    );
+    return;
+  }
+  Purchases.configure({ apiKey });
+}
+
+// Matches by the underlying store product identifier (e.g. "premium_annual"),
+// not RevenueCat's own package identifier — that only works if the App Store
+// Connect / Play Console product ids match constants/plans.ts exactly, which
+// is why the RevenueCat setup instructions insist on that.
+async function getPackageForPlan(planId: PlanId) {
+  const offerings = await Purchases.getOfferings();
+  const current = offerings.current;
+  if (!current) {
+    throw new Error("No current RevenueCat offering is configured.");
+  }
+  const pkg = current.availablePackages.find(
+    (p) => p.product.identifier === planId,
+  );
+  if (!pkg) {
+    throw new Error(
+      `No RevenueCat package found for "${planId}" — check it's in the current offering and the product id matches exactly.`,
+    );
+  }
+  return pkg;
+}
+
+export async function purchasePlan(
+  planId: PlanId,
+): Promise<{ success: boolean; cancelled?: boolean }> {
+  if (!SUPPORTED) return { success: true };
+  const pkg = await getPackageForPlan(planId);
+  try {
+    await Purchases.purchasePackage(pkg);
+    return { success: true };
+  } catch (e) {
+    // react-native-purchases attaches this flag rather than throwing a
+    // distinct error type for "the user backed out of the purchase sheet".
+    if (typeof e === "object" && e !== null && "userCancelled" in e && e.userCancelled) {
+      return { success: false, cancelled: true };
+    }
+    throw e;
+  }
+}
+
+export async function restorePurchases(): Promise<void> {
+  if (!SUPPORTED) return;
+  await Purchases.restorePurchases();
+}
