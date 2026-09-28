@@ -22,22 +22,31 @@ export function configurePurchases(): void {
   Purchases.configure({ apiKey });
 }
 
-// Matches by the underlying store product identifier (e.g. "premium_annual"),
+// App Store Connect / Play Console product ids are permanent once created —
+// prefixed so they can never collide with another app's products under the
+// same developer account, even though circles.plan and every tier-derivation
+// call site (e.g. plan.split("_")[0]) keep using the clean, unprefixed form.
+// This is the only place that translation happens.
+const STORE_PRODUCT_PREFIX = "wcg_";
+const toStoreProductId = (planId: PlanId) => `${STORE_PRODUCT_PREFIX}${planId}`;
+
+// Matches by the underlying store product identifier (e.g. "wcg_premium_annual"),
 // not RevenueCat's own package identifier — that only works if the App Store
-// Connect / Play Console product ids match constants/plans.ts exactly, which
+// Connect / Play Console product ids match toStoreProductId() exactly, which
 // is why the RevenueCat setup instructions insist on that.
 async function getPackageForPlan(planId: PlanId) {
+  const storeProductId = toStoreProductId(planId);
   const offerings = await Purchases.getOfferings();
   const current = offerings.current;
   if (!current) {
     throw new Error("No current RevenueCat offering is configured.");
   }
   const pkg = current.availablePackages.find(
-    (p) => p.product.identifier === planId,
+    (p) => p.product.identifier === storeProductId,
   );
   if (!pkg) {
     throw new Error(
-      `No RevenueCat package found for "${planId}" — check it's in the current offering and the product id matches exactly.`,
+      `No RevenueCat package found for "${storeProductId}" — check it's in the current offering and the product id matches exactly.`,
     );
   }
   return pkg;
