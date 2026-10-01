@@ -16,6 +16,7 @@ export async function getMembers(circleId: string): Promise<Member[]> {
     name: row.display_name,
     phone: row.phone,
     color: row.color,
+    weekStart: row.week_start_day === "monday" ? "monday" : "sunday",
     shape: row.shape,
     role: row.role,
     inviteStatus: row.invite_status,
@@ -56,19 +57,6 @@ export async function setPushToken(memberId: string, token: string): Promise<voi
   const { error } = await supabase
     .from("circle_members")
     .update({ push_token: token })
-    .eq("id", memberId);
-  if (error) throw error;
-}
-
-// TEMP stand-in until there's a real invite/accept flow (needs actually
-// sending a text and a screen for the invitee to open on their own phone).
-// Marks a pending member accepted, keeping the color already reserved for
-// them at add-time — the invitee doesn't get to pick their own color/calendar
-// yet, since there's no real per-invitee flow to do that in.
-export async function acceptMember(memberId: string): Promise<void> {
-  const { error } = await supabase
-    .from("circle_members")
-    .update({ invite_status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", memberId);
   if (error) throw error;
 }

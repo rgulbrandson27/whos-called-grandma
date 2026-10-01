@@ -5,10 +5,12 @@ import {
   getPermissionsAsync,
   requestPermissionsAsync,
 } from "expo-contacts";
+import { presentContactPickerAsync } from "expo-contacts/legacy";
 import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -109,19 +111,39 @@ export default function AddPersonSheet({
     options: PhoneOption[];
   } | null>(null);
 
+  // "Scroll Contacts" closes the sheet before the native picker opens. If the
+  // picked contact then needs fixing by hand (name over the limit), this
+  // brings the sheet back with the details filled in — the parent's `visible`
+  // is already false by then.
+  const [reopened, setReopened] = useState(false);
+
   const takenPhones = taken.map((t) => t.phone).filter((p) => p.trim().length > 0);
 
-  // Loaded once, the first time someone types a name (that's when we ask for
-  // contacts permission). If access is denied, suggestions just never appear.
-  const loadContacts = () => {
+  const askedOnTyping = useRef(false);
+  const limitedAccess = useRef(false);
+  const [limitedHint, setLimitedHint] = useState(false);
+
+  // Loaded once access exists. Typing a name asks for contacts permission the
+  // first time only (`canAsk`); after that this just re-checks, so access
+  // granted later (via "Scroll Contacts" or Settings) still turns suggestions
+  // on. Without access, suggestions just never appear.
+  const loadContacts = (canAsk: boolean) => {
     if (contactsLoad.current) return;
     contactsLoad.current = (async () => {
       try {
         let permission = await getPermissionsAsync();
-        if (!permission.granted && permission.canAskAgain) {
+        if (!permission.granted && canAsk && permission.canAskAgain) {
           permission = await requestPermissionsAsync();
         }
-        if (!permission.granted) return;
+        if (!permission.granted) {
+          contactsLoad.current = null;
+          return;
+        }
+        // iOS "limited access": only the handful of contacts the user chose
+        // to share come back, so most names won't be suggested.
+        const limited = permission.accessPrivileges === "limited";
+        limitedAccess.current = limited;
+        setLimitedHint(limited);
         const rows = await Contact.getAllDetails([
           ContactField.FULL_NAME,
           ContactField.PHONES,
@@ -136,6 +158,7 @@ export default function AddPersonSheet({
         setContacts(entries);
       } catch {
         // Suggestions are a convenience; typing a name still works without them.
+        contactsLoad.current = null;
       }
     })();
   };
@@ -147,6 +170,10 @@ export default function AddPersonSheet({
     setDraftPhone("");
     setAttemptedAdd(false);
     setNumberChoice(null);
+    setReopened(false);
+    // With limited access, re-read contacts next time the sheet is used, so
+    // switching to full access in Settings takes effect without a restart.
+    if (limitedAccess.current) contactsLoad.current = null;
   };
 
   const close = () => {
@@ -172,6 +199,7 @@ export default function AddPersonSheet({
       setNameLimitExceeded(true);
       setNumberChoice(null);
       setSuggestOpen(false);
+      setReopened(true);
       return;
     }
     if (phone && !isPhoneComplete(phone)) {
@@ -227,24 +255,39 @@ export default function AddPersonSheet({
     // Let the sheet finish closing before the native picker opens (iOS).
     await new Promise((resolve) => setTimeout(resolve, 400));
     try {
-      const picked = await Contact.presentPicker();
-      if (!picked) return;
-      if (Platform.OS === "android") {
-        const { granted } = await requestPermissionsAsync();
-        if (!granted) {
-          Alert.alert(
-            "Contacts permission needed",
-            "Allow contacts access in your phone's settings to fill this in automatically.",
-          );
-          return;
-        }
+      // Tapping "Scroll Contacts" is what asks for contacts access. Android
+      // can't read the picked contact without it; iOS can (the picker hands
+      // the contact over itself), so there a "no" only means the name
+      // suggestions stay off.
+      let permission = await getPermissionsAsync();
+      if (!permission.granted && permission.canAskAgain) {
+        permission = await requestPermissionsAsync();
       }
-      const details = await picked.getDetails([
-        ContactField.FULL_NAME,
-        ContactField.PHONES,
-      ]);
-      const name = details.fullName ?? "";
-      const options = toPhoneOptions(details.phones);
+      if (permission.granted) {
+        // Name suggestions now work for the next person too.
+        loadContacts(false);
+      } else if (Platform.OS === "android") {
+        Alert.alert(
+          "Contacts permission needed",
+          "Allow contacts access in your phone's settings to fill this in automatically.",
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ],
+        );
+        return;
+      }
+      // The legacy picker, not Contact.presentPicker(): that one returns only
+      // an id, and looking the id back up (getDetails) fails with "contact
+      // not found" on iOS. This one returns the name and numbers directly.
+      const details = await presentContactPickerAsync();
+      if (!details) return;
+      // Let the picker finish sliding away first — iOS silently drops a
+      // sheet or alert that tries to open while another screen is closing,
+      // which left the "which number?" step never appearing.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const name = details.name?.trim() ?? "";
+      const options = toPhoneOptions(details.phoneNumbers);
       if (!name && options.length === 0) {
         Alert.alert(
           "No details found",
@@ -284,7 +327,7 @@ export default function AddPersonSheet({
 
   return (
     <Modal
-      visible={visible || numberChoice !== null}
+      visible={visible || numberChoice !== null || reopened}
       transparent
       animationType="fade"
       onRequestClose={() => (numberChoice ? setNumberChoice(null) : close())}
@@ -350,7 +393,8 @@ export default function AddPersonSheet({
                   setNameLimitExceeded(value.length > NAME_LIMIT);
                   setDraftName(value.slice(0, NAME_LIMIT));
                   if (value.trim().length > 0) {
-                    loadContacts();
+                    loadContacts(!askedOnTyping.current);
+                    askedOnTyping.current = true;
                     setSuggestOpen(true);
                   } else {
                     setSuggestOpen(false);
@@ -399,6 +443,19 @@ export default function AddPersonSheet({
                     ))}
                   </ScrollView>
                 </View>
+              )}
+              {limitedHint && suggestOpen && suggestions.length === 0 && (
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => Linking.openSettings()}
+                  className="mt-2 active:opacity-70"
+                >
+                  <Text className="text-graphite/70 text-sm text-center">
+                    Only some of your contacts are shared with this app.{" "}
+                    <Text className="underline">Allow full access</Text> to see
+                    name suggestions.
+                  </Text>
+                </Pressable>
               )}
               <TextInput
                 accessibilityLabel="Phone number"

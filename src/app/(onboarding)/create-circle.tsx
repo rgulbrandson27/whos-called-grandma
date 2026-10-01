@@ -6,7 +6,6 @@ import { Alert, Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } f
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddPersonSheet from "@/components/AddPersonSheet";
 import MemberIdentifier from "@/components/MemberIdentifier";
-import { CIRCLE_COLORS } from "@/constants/circle-colors";
 import { InviteStatus, useOnboardingStore } from "@/store/onboarding-store";
 import { lighten } from "@/utils/color";
 import { possessive } from "@/utils/text";
@@ -44,34 +43,18 @@ export default function MemberInvitesScreen() {
   const handleContinue = (showPremium = false) => {
     setWantsMorePeople(showPremium);
     Keyboard.dismiss();
-    // TEMP: skips the adding-members animation and seeds 2 accepted invites
-    // so the tab address-book screen can be screenshotted for a demo. Revert
-    // to the real hasInvites/adding-members flow once that's no longer needed.
-    const demoNames = [...names];
-    demoNames[0] = demoNames[0].trim() || "Alex Rivera";
-    demoNames[1] = demoNames[1].trim() || "Jordan Lee";
-    setInviteNames(demoNames);
-    const demoPhones = [...phones];
-    demoPhones[0] = demoPhones[0].trim() || "(555) 123-4567";
-    demoPhones[1] = demoPhones[1].trim() || "(555) 987-6543";
-    setInvitePhones(demoPhones);
-    const demoStatuses: InviteStatus[] = [
-      "accepted",
-      "accepted",
-      "not_sent",
-      "not_sent",
-      "not_sent",
-    ];
-    setInviteStatuses(demoStatuses);
-    const available = CIRCLE_COLORS.filter((c) => c.hex !== subscriberColor);
-    setInviteColors([
-      available[0]?.hex ?? CIRCLE_COLORS[0].hex,
-      available[1]?.hex ?? CIRCLE_COLORS[1].hex,
-      null,
-      null,
-      null,
-    ]);
-    router.push("/paywall");
+    const remaining = Math.max(0, INVITE_LIMIT - added.length);
+    const goNext = () => router.push("/paywall");
+    if (!showPremium && remaining > 0) {
+      Alert.alert(
+        "Room to grow",
+        `You still have room for ${remaining} more ${remaining === 1 ? "person" : "people"}. You can add them later from your Circle settings.`,
+        [{ text: "Continue", onPress: goNext }],
+        { cancelable: false },
+      );
+      return;
+    }
+    goNext();
   };
 
   const openSheet = () => {

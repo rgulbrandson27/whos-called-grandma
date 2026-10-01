@@ -79,7 +79,7 @@ export default function WelcomeScreen() {
           fontFamily: fontsLoaded ? "NunitoSansBlack" : undefined,
         }}
       >
-        A little help staying in touch.
+        A little help staying in touch
       </Text>
       <View
         style={{
@@ -103,6 +103,7 @@ export default function WelcomeScreen() {
           opacity: 0.65,
           lineHeight: 24,
           marginBottom: 16,
+          transform: [{ scale: 1.05 }],
           fontFamily: fontsLoaded ? "NunitoSansSemiBold" : undefined,
         }}
       >

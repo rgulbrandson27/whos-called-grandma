@@ -1,4 +1,6 @@
+import { setupStep, setupError } from "@/utils/setup-errors";
 import { useState } from "react";
+import { useFonts } from "expo-font";
 import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Text, View } from "react-native";
@@ -8,15 +10,17 @@ import { formatPrice, PlanBilling, PlanId, PlanTier, TIERS } from "@/constants/p
 import { createCircle, updateCirclePlan } from "@/data/circles";
 import { saveInviteMembers } from "@/data/invites";
 import { confirmDevReset } from "@/utils/dev-reset";
+import { errorMessage } from "@/utils/errors";
 import { purchasePlan, restorePurchases } from "@/utils/purchases";
 import { registerForPushNotifications } from "@/utils/push-notifications";
 import { possessive } from "@/utils/text";
 
 
 const HIGHLIGHTS = [
-  "Shared family calendar for everyone in your circle",
-  "Basic: up to 6 people, a simple check-in log",
-  "Premium: up to 20 people, label how you connected and add a short note",
+  "Shared family calendar for circle members",
+  "Notification to members when check-ins have slowed over time",
+  "Basic: up to 6 people, simple contact log, 1 month history",
+  "Premium: up to 20 people, contact customization, 12 months history",
 ];
 
 const TERMS_URL =
@@ -112,29 +116,36 @@ export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const draft = useOnboardingStore();
   const lovedOneName = draft.lovedOneName.trim();
-  const [billing, setBilling] = useState<PlanBilling>("annual");
+  const [billing, setBilling] = useState<PlanBilling>(draft.pendingSetupPlan?.split("_")[1] as PlanBilling ?? "annual");
   // Only the limit popup's "See plans" action starts on Premium annual.
   // Continuing from the circle page always starts on Basic annual.
-  const [tier, setTier] = useState<PlanTier>(draft.wantsMorePeople ? "premium" : "basic");
+  const [tier, setTier] = useState<PlanTier>(draft.pendingSetupPlan?.split("_")[0] as PlanTier ?? (draft.wantsMorePeople ? "premium" : "basic"));
   const [saving, setSaving] = useState(false);
+  const [fontsLoaded] = useFonts({
+    CaveatRegular: require("../../../assets/fonts/Caveat-Regular.ttf"),
+  });
 
   const handleContinue = async () => {
     if (saving) return;
     const plan: PlanId = `${tier}_${billing}`;
     setSaving(true);
+    let step = "Local onboarding state update";
     try {
-      // The actual charge happens here, before anything is recorded — on
-      // web there's no store to buy through, so this is a no-op there.
+      await draft.setPendingSetupPlan(plan);
+      step = "RevenueCat purchase";
+      // Reuse an active purchase before attempting a new charge.
+      // Web has no native purchase mechanism.
       const purchase = await purchasePlan(plan);
       if (!purchase.success) {
         // Cancelled from the native purchase sheet — not an error, just
         // back to the paywall with nothing recorded.
-        setSaving(false);
+        await setupStep("Local onboarding state update", () => draft.setPendingSetupPlan(null));
         return;
       }
 
       // Coming back from member-invites reuses the already-saved circle.
       let circleId = draft.circleId;
+      step = circleId ? "Circle plan update" : "Circle creation";
       if (circleId) {
         await updateCirclePlan(circleId, plan);
       } else {
@@ -148,16 +159,20 @@ export default function PaywallScreen() {
           plan,
         });
         circleId = created.circleId;
-        draft.setCircleId(circleId);
-        draft.setMyMemberId(created.ownerMemberId);
+        step = "Local onboarding state update";
+        await draft.setCircleId(circleId);
+        await draft.setMyMemberId(created.ownerMemberId);
         registerForPushNotifications(created.ownerMemberId);
       }
       // The people added on the create-circle screen — saved here, once the
       // circle itself exists.
+      step = "Invite preparation";
       await saveInviteMembers(circleId, draft);
+      step = "Routing to /member-invites";
       router.replace("/member-invites");
+      await setupStep("Local onboarding state update", () => draft.setPendingSetupPlan(null));
     } catch (e) {
-      Alert.alert("Couldn't complete that", e instanceof Error ? e.message : "Please try again.");
+      Alert.alert("Couldn't complete that", setupError(step, e).message);
     } finally {
       setSaving(false);
     }
@@ -180,7 +195,7 @@ export default function PaywallScreen() {
     } catch (e) {
       Alert.alert(
         "Couldn't restore purchases",
-        e instanceof Error ? e.message : "Please try again.",
+        errorMessage(e),
       );
     } finally {
       setSaving(false);
@@ -195,42 +210,53 @@ export default function PaywallScreen() {
         paddingBottom: insets.bottom,
       }}
     >
-      <View className="flex-row items-center px-4">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.replace("/create-circle");
-          }}
-          className="items-center justify-center active:opacity-70"
-          style={{ width: 44, height: 44 }}
-        >
-          <Svg width={26} height={26} viewBox="0 0 24 24" accessible={false}>
-            <Path d="M20 12H4M11 5l-7 7 7 7" fill="none" stroke="#29486E" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        </Pressable>
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace("/create-circle");
+        }}
+        className="absolute items-center justify-center active:opacity-70"
+        style={{ top: insets.top + 8, left: 16, width: 48, height: 48, zIndex: 1 }}
+      >
+        <Svg width={26} height={26} viewBox="0 0 24 24" accessible={false}>
+          <Path d="M20 12H4M11 5l-7 7 7 7" fill="none" stroke="#29486E" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      </Pressable>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-start" }}
         showsVerticalScrollIndicator={false}
       >
         {/* onLongPress: development builds only, wipes saved data for testing. */}
         <Text
           onLongPress={__DEV__ ? confirmDevReset : undefined}
-          className="text-[#241E38] text-3xl font-bold text-center px-6 mt-4"
+          className="text-[#241E38] text-center px-6 mt-8"
+          style={{ fontFamily: fontsLoaded ? "CaveatRegular" : undefined, fontSize: 44, lineHeight: 52 }}
         >
           {"Choose a plan for\n"}
           {lovedOneName ? possessive(lovedOneName) : "your"} circle.
         </Text>
         <View className="px-8 mt-6" style={{ gap: 10 }}>
-          {HIGHLIGHTS.map((line) => (
-            <View key={line} className="flex-row items-center" style={{ gap: 10 }}>
-              <CheckIcon />
-              <Text className="text-graphite text-base flex-1">{line}</Text>
-            </View>
-          ))}
+          {HIGHLIGHTS.map((line) => {
+            const tierLabel = line.match(/^(Basic|Premium): /);
+            return (
+              <View key={line} className="flex-row items-center" style={{ gap: 10 }}>
+                <CheckIcon />
+                <Text className="text-graphite text-base flex-1">
+                  {tierLabel ? (
+                    <>
+                      <Text className="font-bold">{tierLabel[1]}:</Text>
+                      {line.slice(tierLabel[0].length - 1)}
+                    </>
+                  ) : (
+                    line
+                  )}
+                </Text>
+              </View>
+            );
+          })}
         </View>
 
         <View className="px-4 mt-8">
@@ -278,7 +304,7 @@ export default function PaywallScreen() {
             <Text className="text-xl font-semibold text-white">Select plan</Text>
           )}
         </Pressable>
-        <View className="flex-row justify-center mt-3 mb-1" style={{ gap: 6 }}>
+        <View className="flex-row justify-center mt-2 mb-1" style={{ gap: 6 }}>
           <Pressable onPress={() => handleLegalPress("Terms of Use", TERMS_URL)}>
             <Text className="text-graphite/60 text-xs underline">Terms of Use</Text>
           </Pressable>
@@ -287,7 +313,7 @@ export default function PaywallScreen() {
             <Text className="text-graphite/60 text-xs underline">Privacy Policy</Text>
           </Pressable>
         </View>
-        <Pressable onPress={handleRestore} className="items-center mt-2">
+        <Pressable onPress={handleRestore} className="items-center" style={{ marginTop: 2 }}>
           <Text className="text-graphite/60 text-xs underline">
             Restore purchases
           </Text>

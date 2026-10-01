@@ -1,27 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddPersonSheet from "@/components/AddPersonSheet";
+import MemberPreferencesEditor from "@/components/MemberPreferencesEditor";
 import MemberIdentifier from "@/components/MemberIdentifier";
 import { CIRCLE_COLORS } from "@/constants/circle-colors";
 import type { PlanTier } from "@/constants/plans";
 import { getCircleSummary } from "@/data/circles";
 import { getEvents } from "@/data/events";
 import type { CalendarEvent, Member } from "@/data/fakeData";
-import { acceptMember, addMember, getMembers, removeMember } from "@/data/members";
+import { addMember, getMembers, removeMember } from "@/data/members";
 import { useOnboardingStore } from "@/store/onboarding-store";
-import { getInviteUrl } from "@/utils/invite-link";
-import { possessive } from "@/utils/text";
+import { sendInvite } from "@/utils/invite-link";
 
 const GRAY_BG = "#D7DBE1";
 const GRAY_AVATAR = "#9AA5B1";
 const CARD_HEIGHT = 60;
-const TAB_WIDTH = 64;
-const TAB_HEIGHT = 72;
-const TAB_GAP = 6;
-const PENDING_MAX_HEIGHT = 240;
+
 
 const limitForTier = (tier: PlanTier) => (tier === "premium" ? 20 : 6);
 
@@ -34,7 +31,13 @@ const formatEventDate = (date: string) =>
 
 export default function MembersScreen() {
   const insets = useSafeAreaInsets();
+  const tabScroll = useRef<ScrollView>(null);
+  const tabPositions = useRef<Record<string, number>>({});
+  const myMemberId = useOnboardingStore((state) => state.myMemberId);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const circleId = useOnboardingStore((state) => state.circleId);
+  const sentInviteIds = useOnboardingStore((state) => state.sentInviteIds) ?? [];
+  const markInviteSent = useOnboardingStore((state) => state.markInviteSent);
   const setWantsMorePeople = useOnboardingStore((state) => state.setWantsMorePeople);
 
   const [members, setMembers] = useState<Member[] | null>(null);
@@ -66,13 +69,24 @@ export default function MembersScreen() {
   };
 
   const handleSendInvite = (member: Member) => {
-    const url = getInviteUrl(member.id);
-    Share.share({
-      message: `You're invited to ${possessive(lovedOneName || "our")} circle on Who's Called Grandma! Tap to join: ${url}`,
-      url,
-    }).catch(() => {
-      Alert.alert("Couldn't open share sheet", "Please try again.");
-    });
+    sendInvite(member, lovedOneName)
+      .then((sent) => {
+        if (sent) markInviteSent(member.id);
+      })
+      .catch(() => {
+        Alert.alert("Couldn't send the invite", "Please try again.");
+      });
+  };
+
+  const handleResendInvite = (member: Member) => {
+    Alert.alert(
+      "Invite pending",
+      `${member.name} hasn't joined yet. Send the invite again?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Send again", onPress: () => handleSendInvite(member) },
+      ],
+    );
   };
 
   useEffect(() => {
@@ -89,22 +103,11 @@ export default function MembersScreen() {
   const pending = (members ?? []).filter(
     (m) => m.role !== "owner" && m.inviteStatus === "pending",
   );
-  // Left column fills up to however many tabs actually fit on screen; once
-  // there are more accepted people than that, the rest spill into a second
-  // column on the right instead of making the left side scroll.
-  const [tabAreaHeight, setTabAreaHeight] = useState(0);
-  const tabCapacity = Math.max(
-    1,
-    Math.floor((tabAreaHeight + TAB_GAP) / (TAB_HEIGHT + TAB_GAP)),
-  );
-  const leftTabs = tabMembers.slice(0, tabCapacity);
-  const rightTabs = tabMembers.slice(tabCapacity);
-
   useEffect(() => {
     if (selectedId && tabMembers.some((m) => m.id === selectedId)) return;
-    setSelectedId(tabMembers[0]?.id ?? null);
+    setSelectedId(tabMembers.find((member) => member.id === myMemberId)?.id ?? tabMembers[0]?.id ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [members]);
+  }, [members, myMemberId]);
 
   const limit = limitForTier(tier);
   const selected = tabMembers.find((m) => m.id === selectedId) ?? null;
@@ -179,35 +182,10 @@ export default function MembersScreen() {
     );
   };
 
-  const handleSimulateAccept = (member: Member) => {
-    Alert.alert(
-      "Simulate acceptance",
-      `There's no real invite flow yet — that needs actually sending ${member.name} a text and a screen for them to open on their own phone, where they'd pick their own color and calendar view. This just marks them accepted for testing, keeping the color already reserved for them.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Mark accepted",
-          onPress: async () => {
-            try {
-              await acceptMember(member.id);
-              await load();
-              setSelectedId(member.id);
-            } catch (e) {
-              Alert.alert(
-                "Couldn't update",
-                e instanceof Error ? e.message : "Please try again.",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
   return (
     <View
       className="flex-1 bg-country"
-      style={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom }}
+      style={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right }}
     >
       <View className="flex-row items-center px-4">
         <Pressable
@@ -246,56 +224,56 @@ export default function MembersScreen() {
       )}
 
       {members && (
-        <View className="flex-1 px-4 pt-4">
+        <ScrollView className="flex-1 px-4 pt-4" contentContainerStyle={{ paddingBottom: 24 }}>
           {/* Pending: still cards, not tabs, until each one accepts. */}
-          <ScrollView
-            style={{ maxHeight: PENDING_MAX_HEIGHT }}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
+          <View style={{ gap: 8 }}>
             {pending.map((member) => (
               <View
                 key={member.id}
-                className="flex-row items-center rounded-2xl bg-white/60 px-4 py-3"
+                className="justify-center rounded-2xl bg-white/60 px-4 py-3"
                 style={{ minHeight: CARD_HEIGHT }}
               >
-                <MemberIdentifier color={GRAY_AVATAR} size={36} />
-                <View className="flex-1 ml-4">
-                  <Text className="text-graphite text-base font-bold" numberOfLines={1}>
-                    {member.name}
-                  </Text>
-                  <Text className="text-graphite/60 text-xs" numberOfLines={1}>
-                    {member.phone?.trim() || "No number saved"}
-                  </Text>
-                </View>
-                <View className="items-end">
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => handleSendInvite(member)}
-                    className="rounded-full bg-ink px-3 py-1.5 active:opacity-80"
-                  >
-                    <Text className="text-white text-xs font-semibold">
-                      Send invite
+                <View className="flex-row items-center" style={{ gap: 12 }}>
+                  <MemberIdentifier color={GRAY_AVATAR} size={36} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text className="text-graphite text-base font-bold" numberOfLines={1}>
+                      {member.name}
                     </Text>
-                  </Pressable>
-                  <View className="flex-row mt-1.5" style={{ gap: 8 }}>
+                    <Text className="text-graphite/60 text-xs" numberOfLines={1}>
+                      {member.phone?.trim() || "No number saved"}
+                    </Text>
+                  </View>
+                  {sentInviteIds.includes(member.id) ? (
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => handleSimulateAccept(member)}
-                      className="active:opacity-70"
+                      accessibilityLabel={`Invite pending for ${member.name}. Send again`}
+                      onPress={() => handleResendInvite(member)}
+                      className="rounded-full bg-graphite/10 px-3 py-1.5 active:opacity-60"
                     >
-                      <Text className="text-graphite/50 text-[11px] underline">
+                      <Text className="text-graphite/70 text-xs font-semibold">
                         Pending
                       </Text>
                     </Pressable>
+                  ) : (
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => handleRemove(member)}
-                      className="active:opacity-70"
+                      onPress={() => handleSendInvite(member)}
+                      className="rounded-full bg-ink px-3 py-1.5 active:opacity-80"
                     >
-                      <Text className="text-graphite/50 text-[11px] underline">Remove</Text>
+                      <Text className="text-white text-xs font-semibold">
+                        Send invite
+                      </Text>
                     </Pressable>
-                  </View>
+                  )}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${member.name}`}
+                    onPress={() => handleRemove(member)}
+                    hitSlop={8}
+                    className="ml-2 active:opacity-60"
+                  >
+                    <Text className="text-graphite/50 text-xs underline">Remove</Text>
+                  </Pressable>
                 </View>
               </View>
             ))}
@@ -320,53 +298,62 @@ export default function MembersScreen() {
                 />
               </Svg>
             </Pressable>
-          </ScrollView>
+          </View>
 
-          {/* Accepted: tabs, growing one at a time as pending cards accept.
-              Left column fills to whatever fits on screen (measured below);
-              anyone past that spills into a second column on the right. */}
-          <View
-            className="flex-1 flex-row mt-4"
-            onLayout={(e) => setTabAreaHeight(e.nativeEvent.layout.height)}
-          >
+          {/* Colored member tabs stay together above a full-width detail page. */}
+          <View className="mt-4" style={{ minWidth: 0 }}>
             <ScrollView
-              style={{ width: TAB_WIDTH }}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ gap: TAB_GAP, paddingBottom: 12 }}
+              horizontal
+              ref={tabScroll}
+              showsHorizontalScrollIndicator
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ gap: 8, paddingBottom: 10 }}
             >
-              {leftTabs.map((member) => (
+              {tabMembers.map((member) => (
                 <TabButton
                   key={member.id}
                   member={member}
-                  side="left"
                   selected={member.id === selectedId}
-                  onPress={() => setSelectedId(member.id)}
+                  onLayout={(x) => { tabPositions.current[member.id] = x; }}
+                  onPress={() => {
+                    setSelectedId(member.id);
+                    tabScroll.current?.scrollTo({ x: tabPositions.current[member.id] ?? 0, animated: true });
+                  }}
                 />
               ))}
             </ScrollView>
 
             {selected && (
-              <ScrollView
-                className="flex-1 rounded-2xl"
+              <View
+                className="rounded-2xl"
                 style={{
+                  padding: 16,
+                  minWidth: 0,
                   backgroundColor: selected.color
                     ? `${selected.color}22`
                     : GRAY_BG,
                 }}
-                contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
-                showsVerticalScrollIndicator={false}
               >
                 <View className="flex-row items-center">
                   <MemberIdentifier color={selected.color ?? GRAY_AVATAR} size={56} />
-                  <View className="ml-3 flex-1">
-                    <Text className="text-graphite text-lg font-bold" numberOfLines={1}>
+                  <View className="ml-3 flex-1" style={{ minWidth: 0 }}>
+                    <Text className="text-graphite text-lg font-bold">
                       {selected.name}
                     </Text>
                     <Text className="text-graphite/60 text-xs">
-                      {selected.role === "owner" ? "You · circle organizer" : "Circle member"}
+                      {`${selected.id === myMemberId ? "You · " : ""}${selected.role === "owner" ? "Circle organizer" : "Circle member"}`}
                     </Text>
                   </View>
                 </View>
+                {selected.id === myMemberId && selected.inviteStatus === "accepted" && (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setPreferencesOpen(true)}
+                    className="self-start mt-4 rounded-lg bg-ink px-4 py-3 active:opacity-80"
+                  >
+                    <Text className="text-white font-semibold">Edit my preferences</Text>
+                  </Pressable>
+                )}
                 {selected.phone && (
                   <Text className="text-graphite text-sm mt-4">{selected.phone}</Text>
                 )}
@@ -417,29 +404,17 @@ export default function MembersScreen() {
                     )}
                   </View>
                 </View>
-              </ScrollView>
-            )}
-
-            {rightTabs.length > 0 && (
-              <ScrollView
-                style={{ width: TAB_WIDTH }}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ gap: TAB_GAP, paddingBottom: 12 }}
-              >
-                {rightTabs.map((member) => (
-                  <TabButton
-                    key={member.id}
-                    member={member}
-                    side="right"
-                    selected={member.id === selectedId}
-                    onPress={() => setSelectedId(member.id)}
-                  />
-                ))}
-              </ScrollView>
+              </View>
             )}
           </View>
-        </View>
+        </ScrollView>
       )}
+
+      <MemberPreferencesEditor
+        visible={preferencesOpen}
+        onClose={() => setPreferencesOpen(false)}
+        onSaved={load}
+      />
 
       <AddPersonSheet
         visible={sheetOpen}
@@ -452,54 +427,33 @@ export default function MembersScreen() {
   );
 }
 
-// A left-column tab connects into the page on its right edge; a right-column
-// tab connects on its left edge instead — everything else is identical.
-function TabButton({
-  member,
-  side,
-  selected,
-  onPress,
-}: {
+// Keep the colored-tab concept, but let each name size its own scrollable tab.
+function TabButton({ member, selected, onPress, onLayout }: {
   member: Member;
-  side: "left" | "right";
   selected: boolean;
   onPress: () => void;
+  onLayout: (x: number) => void;
 }) {
-  const rounded =
-    side === "left"
-      ? { borderTopLeftRadius: 10, borderBottomLeftRadius: 10 }
-      : { borderTopRightRadius: 10, borderBottomRightRadius: 10 };
-  const connect =
-    side === "left"
-      ? { marginRight: selected ? -1 : 10 }
-      : { marginLeft: selected ? -1 : 10 };
   return (
     <Pressable
+      onLayout={(event) => onLayout(event.nativeEvent.layout.x)}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       accessibilityLabel={member.name}
       onPress={onPress}
-      className="items-center justify-center active:opacity-80"
+      className="items-center justify-center rounded-xl active:opacity-80"
       style={{
-        height: TAB_HEIGHT,
-        backgroundColor: member.color ?? GRAY_BG,
-        ...rounded,
-        ...connect,
-        elevation: selected ? 2 : 0,
-        paddingHorizontal: 4,
+        minHeight: 76,
+        maxWidth: 180,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        backgroundColor: member.color ? `${member.color}44` : GRAY_BG,
+        borderWidth: 2,
+        borderColor: selected ? "#29486E" : "transparent",
       }}
     >
       <MemberIdentifier color={member.color ?? GRAY_AVATAR} size={24} />
-      <Text
-        numberOfLines={1}
-        className="font-bold"
-        style={{
-          fontSize: 9,
-          marginTop: 3,
-          maxWidth: TAB_WIDTH - 10,
-          color: member.color ? "#FFFFFF" : "#6B7280",
-        }}
-      >
+      <Text className="font-bold text-graphite text-sm text-center" style={{ marginTop: 4 }}>
         {member.name}
       </Text>
     </Pressable>

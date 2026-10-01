@@ -1,3 +1,4 @@
+import { setupStep, setupError } from "@/utils/setup-errors";
 import { supabase } from "./supabaseClient";
 import type { PlanId } from "@/constants/plans";
 import type { WeekStart } from "@/store/onboarding-store";
@@ -19,7 +20,7 @@ type NewCircle = {
 export async function createCircle(
   draft: NewCircle,
 ): Promise<{ circleId: string; ownerMemberId: string }> {
-  const { data: circle, error } = await supabase
+  const { data: circle, error } = await setupStep("Circle creation", () => supabase
     .from("circles")
     .insert({
       loved_one_name: draft.lovedOneName,
@@ -28,10 +29,10 @@ export async function createCircle(
       plan: draft.plan,
     })
     .select("id")
-    .single();
-  if (error) throw error;
+    .single());
+  if (error) throw setupError("Circle creation", error);
 
-  const { data: member, error: memberError } = await supabase
+  const { data: member, error: memberError } = await setupStep("Owner member creation", () => supabase
     .from("circle_members")
     .insert({
       circle_id: circle.id,
@@ -46,19 +47,21 @@ export async function createCircle(
       week_start_day: draft.subscriberWeekStart,
     })
     .select("id")
-    .single();
+    .single());
   if (memberError) {
     // Don't leave a circle with no subscriber behind (best effort).
-    await supabase.from("circles").delete().eq("id", circle.id);
-    throw memberError;
+    try {
+      await supabase.from("circles").delete().eq("id", circle.id);
+    } catch { /* Keep the original owner failure visible. */ }
+    throw setupError("Owner member creation", memberError);
   }
 
   return { circleId: circle.id, ownerMemberId: member.id };
 }
 
 export async function updateCirclePlan(circleId: string, plan: PlanId) {
-  const { error } = await supabase.from("circles").update({ plan }).eq("id", circleId);
-  if (error) throw error;
+  const { error } = await setupStep("Circle plan update", () => supabase.from("circles").update({ plan }).eq("id", circleId));
+  if (error) throw setupError("Circle plan update", error);
 }
 
 // Add fields here as screens need them.

@@ -62,11 +62,13 @@ export type CalendarCell = {
 export function buildMonthCells(
   year: number,
   monthIndex: number,
+  weekStart: "sunday" | "monday" = "sunday",
 ): CalendarCell[] {
   const { firstWeekday, daysInMonth } = getMonthGrid(year, monthIndex);
   const cells: CalendarCell[] = [];
 
-  for (let i = 0; i < firstWeekday; i++) {
+  const leadingDays = (firstWeekday + (weekStart === "monday" ? 6 : 0)) % 7;
+  for (let i = 0; i < leadingDays; i++) {
     cells.push({ day: null, dateKey: null, isToday: false });
   }
 

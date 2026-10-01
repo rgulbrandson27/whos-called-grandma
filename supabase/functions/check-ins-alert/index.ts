@@ -34,10 +34,11 @@ Deno.serve(async () => {
   for (const circle of circles ?? []) {
     const { data: lastEvent, error: eventError } = await supabase
       .from("events")
-      .select("event_date")
+      .select("event_date, created_at")
       .eq("circle_id", circle.id)
       .eq("status", "done")
       .order("event_date", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (eventError) {
@@ -57,11 +58,19 @@ Deno.serve(async () => {
       continue;
     }
 
-    // One alert per silence period — don't re-notify daily once overdue,
-    // only after a fresh check-in resets the clock and it goes quiet again.
+    // Contact dates still drive the three-day clock, not entry timestamps.
+    // Since contact time-of-day isn't stored, a same-UTC-day contact entered
+    // after an alert counts as new activity. Older backdated contacts don't
+    // re-arm an already-alerted period merely because they were entered later.
+    const sameDayContactAfterAlert = Boolean(
+      lastEvent && circle.last_alert_sent_at &&
+      lastEvent.event_date === new Date(circle.last_alert_sent_at).toISOString().slice(0, 10) &&
+      new Date(lastEvent.created_at) > new Date(circle.last_alert_sent_at),
+    );
     if (
       circle.last_alert_sent_at &&
-      new Date(circle.last_alert_sent_at) >= lastActivity
+      new Date(circle.last_alert_sent_at) >= lastActivity &&
+      !sameDayContactAfterAlert
     ) {
       results[circle.id] = "already alerted";
       continue;

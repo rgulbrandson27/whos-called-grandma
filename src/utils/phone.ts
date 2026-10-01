@@ -29,13 +29,9 @@ const DEFAULT_COUNTRY = deviceCountry();
 // `previous` is the field's last value: used to spot backspacing, and returned
 // unchanged when a keystroke would make the number too long.
 export const formatTypedNumber = (raw: string, previous = "") => {
-  let text = raw;
-  // US numbers: a leading 1 is just the country/trunk code (no US area code
-  // starts with 1), so drop it and every number shows the same way.
-  if (getCountryCallingCode(DEFAULT_COUNTRY) === "1" && !text.trim().startsWith("+")) {
-    text = text.replace(/\D/g, "").replace(/^1/, "");
-  }
-  const formatted = new AsYouType(DEFAULT_COUNTRY).input(text);
+  // Preserve prefixes while typing; the library handles both a national
+  // leading 1 and explicit international prefixes such as +1 and +44.
+  const formatted = new AsYouType(DEFAULT_COUNTRY).input(raw);
   if (validatePhoneNumberLength(formatted, DEFAULT_COUNTRY) === "TOO_LONG") {
     return previous;
   }

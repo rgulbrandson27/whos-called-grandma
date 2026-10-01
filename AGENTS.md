@@ -15,10 +15,10 @@ categories.
   data. Keeps privacy/compliance scope small and keeps the app focused on
   "did someone check in," not caregiving/health management.
 - No free plan. Two paid tiers, each monthly or annual:
-  - Basic: $2.99/mo or $20.99/yr (40% off). Up to 6 people per circle,
+  - Basic: $2.99/mo or $19.99/yr (45% off). Up to 6 people per circle,
     shared calendar, 1 month of history. (The Monday week-start choice is
     available to everyone but isn't advertised as a feature.)
-  - Premium: $5.99/mo or $35.99/yr (50% off). Everything in Basic plus up
+  - Premium: $5.99/mo or $34.99/yr (50% off). Everything in Basic plus up
     to 20 people, photos, longer custom notes, customizable notification
     settings, notification frequency.
   - `circles.plan` stores `basic_monthly`, `basic_annual`, `premium_monthly`

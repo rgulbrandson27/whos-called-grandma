@@ -1,3 +1,4 @@
+import type { PlanId } from "@/constants/plans";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -42,6 +43,9 @@ type OnboardingDraft = {
 };
 
 type OnboardingStore = OnboardingDraft & {
+  // Resume unfinished setup after a restart; RevenueCat remains the payment authority.
+  pendingSetupPlan: PlanId | null;
+  setPendingSetupPlan: (plan: PlanId | null) => Promise<void>;
   // Id of the circle saved to Supabase (null until a plan is chosen). Lives
   // outside the draft so resetOnboardingDraft doesn't forget it — with no
   // login, this is how the device finds its circle again.
@@ -52,6 +56,12 @@ type OnboardingStore = OnboardingDraft & {
   // attach this device's push token to.
   myMemberId: string | null;
   setMyMemberId: (id: string | null) => void;
+  // circle_members ids this device has opened an invite text for — what flips
+  // "Send invite" to "Pending". Device-local: the database's invite_status is
+  // already "pending" from the moment someone is added, so it can't tell
+  // "invited" apart from "not invited yet".
+  sentInviteIds: string[];
+  markInviteSent: (memberId: string) => void;
   setLovedOneName: (name: string) => void;
   setLovedOneBirthday: (month: number | null, day: number | null) => void;
   setSubscriberName: (name: string) => void;
@@ -86,10 +96,19 @@ export const useOnboardingStore = create<OnboardingStore>()(
   persist(
     (set) => ({
   ...initialDraft,
+  pendingSetupPlan: null,
+  setPendingSetupPlan: async (pendingSetupPlan) => { await set({ pendingSetupPlan }); },
   circleId: null,
   setCircleId: (circleId) => set({ circleId }),
   myMemberId: null,
   setMyMemberId: (myMemberId) => set({ myMemberId }),
+  sentInviteIds: [],
+  markInviteSent: (memberId) =>
+    set((state) => ({
+      sentInviteIds: state.sentInviteIds.includes(memberId)
+        ? state.sentInviteIds
+        : [...state.sentInviteIds, memberId],
+    })),
   setLovedOneName: (lovedOneName) => set({ lovedOneName }),
   setLovedOneBirthday: (lovedOneBirthdayMonth, lovedOneBirthdayDay) =>
     set({ lovedOneBirthdayMonth, lovedOneBirthdayDay }),
@@ -109,7 +128,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
       inviteStatuses: Array(INVITE_COUNT).fill("not_sent"),
       inviteColors: Array(INVITE_COUNT).fill(null),
     }),
-  resetOnboardingDraft: () => set(initialDraft),
+  resetOnboardingDraft: () => set({ ...initialDraft, pendingSetupPlan: null }),
     }),
     {
       // The whole account lives on the device until a plan is chosen.

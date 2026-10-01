@@ -104,7 +104,7 @@ export default function SubscriberScreen() {
         onSubmitEditing={handleContinue}
         underlineColorAndroid="transparent"
         selectionColor="#F5D779"
-        className="w-full max-w-md self-center mt-14 border-b border-ink/50 text-graphite text-center web:outline-none"
+        className="w-full max-w-md self-center mt-14 border-b-[1.5px] border-ink/50 text-graphite text-center web:outline-none"
         style={{ fontSize: name || isFocused ? 52 : 28, height: 68, paddingTop: 10, paddingBottom: 2, includeFontPadding: false, textAlignVertical: "center" }}
       />
       {limitExceeded && (

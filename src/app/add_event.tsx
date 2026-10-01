@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFonts } from "expo-font";
 import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
@@ -23,9 +23,9 @@ import { useOnboardingStore } from "@/store/onboarding-store";
 
 const GRAY_AVATAR = "#9AA5B1";
 const NOTE_LIMIT = 100;
-// "Two week's worth" — a week either side of today.
-const DAYS_BACK = 7;
-const DAYS_FORWARD = 7;
+// Keep the same horizontal chips, with a month available in either direction.
+const DAYS_BACK = 30;
+const DAYS_FORWARD = 30;
 const KIND_OPTIONS = ["Call", "Visit", "Other"];
 
 const dateKey = (d: Date) =>
@@ -48,6 +48,8 @@ export default function AddEventScreen() {
 
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const dateScroll = useRef<ScrollView>(null);
+  const datePositioned = useRef(false);
   const [kind, setKind] = useState<string | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -133,6 +135,7 @@ export default function AddEventScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
+          disabled={saving}
           onPress={() => (router.canGoBack() ? router.back() : router.replace("/calendar"))}
           className="items-center justify-center active:opacity-70"
           style={{ width: 44, height: 44 }}
@@ -147,6 +150,14 @@ export default function AddEventScreen() {
               strokeLinejoin="round"
             />
           </Svg>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={saving}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/calendar"))}
+          className="ml-auto px-4 py-3 active:opacity-70"
+        >
+          <Text className="text-ink text-base font-semibold">Cancel</Text>
         </Pressable>
       </View>
 
@@ -230,6 +241,13 @@ export default function AddEventScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            ref={dateScroll}
+            onContentSizeChange={() => {
+              if (datePositioned.current) return;
+              datePositioned.current = true;
+              // Start with yesterday and today visible, while allowing scrolling back.
+              dateScroll.current?.scrollTo({ x: (DAYS_BACK - 1) * 60, animated: false });
+            }}
             contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
           >
             {days.map((day) => {
@@ -240,6 +258,7 @@ export default function AddEventScreen() {
                   key={dateKey(day)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected }}
+                  accessibilityLabel={day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                   onPress={() => setSelectedDate(day)}
                   className={`items-center justify-center rounded-xl px-3 py-2 active:opacity-80 ${
                     selected ? "bg-ink" : "bg-white/50"
@@ -257,6 +276,9 @@ export default function AddEventScreen() {
                     className={`text-lg font-bold ${selected ? "text-white" : "text-graphite"}`}
                   >
                     {day.getDate()}
+                  </Text>
+                  <Text className={`text-[10px] ${selected ? "text-white/80" : "text-graphite/60"}`}>
+                    {day.toLocaleDateString(undefined, { month: "short" })}
                   </Text>
                 </Pressable>
               );

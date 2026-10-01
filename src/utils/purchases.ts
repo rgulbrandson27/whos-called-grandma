@@ -1,3 +1,4 @@
+import { setupStep, setupError } from "@/utils/setup-errors";
 import { Platform } from "react-native";
 import Purchases from "react-native-purchases";
 import type { PlanId } from "@/constants/plans";
@@ -56,7 +57,19 @@ export async function purchasePlan(
   planId: PlanId,
 ): Promise<{ success: boolean; cancelled?: boolean }> {
   if (!SUPPORTED) return { success: true };
-  const pkg = await getPackageForPlan(planId);
+  // Match the exact store product, so Basic never authorizes Premium and a
+  // different billing selection is not silently recorded as purchased.
+  const info = await setupStep("RevenueCat entitlement lookup", async () => {
+    await Purchases.invalidateCustomerInfoCache();
+    return Purchases.getCustomerInfo();
+  });
+  const productId = toStoreProductId(planId);
+  const entitled = Object.values(info.entitlements.active)
+    .some((entitlement) => entitlement.isActive && entitlement.productIdentifier === productId);
+  if (entitled || info.activeSubscriptions.includes(productId)) {
+    return { success: true };
+  }
+  const pkg = await setupStep("RevenueCat package lookup", () => getPackageForPlan(planId));
   try {
     await Purchases.purchasePackage(pkg);
     return { success: true };
@@ -66,7 +79,7 @@ export async function purchasePlan(
     if (typeof e === "object" && e !== null && "userCancelled" in e && e.userCancelled) {
       return { success: false, cancelled: true };
     }
-    throw e;
+    throw setupError("RevenueCat purchase", e);
   }
 }
 

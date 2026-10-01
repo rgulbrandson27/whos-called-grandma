@@ -14,6 +14,8 @@ type Props = {
 
 // How many overlapping avatars a cell shows before switching to a "+N" badge.
 const MAX_AVATARS = 3;
+// Someone still pending hasn't picked their own color yet.
+const GRAY_AVATAR = "#9AA5B1";
 
 export default function DaySquare({ date, rowHeight, events, members, onPress }: Props) {
   const lastTap = useRef(0);
@@ -92,7 +94,7 @@ export default function DaySquare({ date, rowHeight, events, members, onPress }:
                   opacity: contact.done ? 1 : 0.5,
                 }}
               >
-                <MemberIdentifier color={contact.member.color} size={avatarSize} />
+                <MemberIdentifier color={contact.member.color ?? GRAY_AVATAR} size={avatarSize} />
               </View>
             ))}
           </View>

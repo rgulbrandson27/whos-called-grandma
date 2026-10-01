@@ -18,6 +18,7 @@ function useDraftHydrated() {
 // Temporary entry point while building the onboarding flow.
 export default function IndexScreen() {
   const hydrated = useDraftHydrated();
+  const pendingSetupPlan = useOnboardingStore((state) => state.pendingSetupPlan);
   const circleId = useOnboardingStore((state) => state.circleId);
   const lovedOneName = useOnboardingStore((state) => state.lovedOneName);
   const subscriberName = useOnboardingStore((state) => state.subscriberName);
@@ -25,7 +26,9 @@ export default function IndexScreen() {
 
   if (!hydrated) return <View className="flex-1 bg-country" />;
 
-  // A plan was already chosen and the circle saved: skip onboarding.
+  // A saved circle alone does not mean invite setup finished.
+  if (pendingSetupPlan) return <Redirect href="/paywall" />;
+  // Legacy completed circles retain their existing destination.
   if (circleId) return <Redirect href="/member-invites" />;
   // Answers are saved but no plan chosen yet: pick up at the paywall.
   if (lovedOneName && subscriberName && subscriberColor) return <Redirect href="/paywall" />;

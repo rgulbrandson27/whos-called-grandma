@@ -6,7 +6,8 @@ export type Member = {
   userId: string | null;
   name: string;
   phone: string | null;
-  color: string;
+  color: string | null;
+  weekStart?: "sunday" | "monday";
   shape: string;
   role: string;
   inviteStatus: MemberInviteStatus;

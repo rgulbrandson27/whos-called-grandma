@@ -20,6 +20,34 @@ const notify = (title: string, message: string) => {
   }
 };
 
+// Store listing for whichever phone is viewing the page — see
+// EXPO_PUBLIC_APP_STORE_URL / EXPO_PUBLIC_PLAY_STORE_URL in .env. Undefined
+// until that platform's listing exists, which hides the download button.
+const getStoreUrl = (): string | undefined => {
+  const isAndroid =
+    Platform.OS === "android" ||
+    (Platform.OS === "web" &&
+      typeof navigator !== "undefined" &&
+      /android/i.test(navigator.userAgent));
+  return (
+    (isAndroid
+      ? process.env.EXPO_PUBLIC_PLAY_STORE_URL
+      : process.env.EXPO_PUBLIC_APP_STORE_URL) || undefined
+  );
+};
+
+// On the web, RN's Linking.openURL opens a new tab (window.open), and iOS
+// Safari silently drops a new tab aimed at an app link — the button looks
+// dead even with the app installed. Navigating the current tab instead is
+// what makes Safari offer "Open in Who's Called Grandma?".
+const openLink = (url: string): Promise<void> => {
+  if (Platform.OS === "web") {
+    window.location.href = url;
+    return Promise.resolve();
+  }
+  return Linking.openURL(url);
+};
+
 export default function InviteLandingScreen() {
   // A query param (?member=xxx), not a dynamic path segment — Expo Router's
   // static web export can't pre-render a path for every member id that'll
@@ -38,14 +66,20 @@ export default function InviteLandingScreen() {
       );
   }, [memberId]);
 
+  const storeUrl = getStoreUrl();
+
+  const handleDownload = () => {
+    if (storeUrl) openLink(storeUrl);
+  };
+
   const handleOpenApp = () => {
     // Deep link into the app's own mini onboarding for this invite. This
-    // only works if the app is already installed — there's no App Store
-    // listing yet to fall back to, and detecting "is it installed" from a
-    // plain web page needs either a published Universal Link (a file hosted
-    // on this domain) or a service like Branch/Firebase Dynamic Links,
-    // neither of which exist yet. Revisit once the app is actually live.
-    Linking.openURL(`whoscalledgrandma://join/${memberId}`).catch(() => {
+    // only works if the app is already installed — a browser silently does
+    // nothing with a custom scheme otherwise, and detecting "is it installed"
+    // from a plain web page needs either a published Universal Link (a file
+    // hosted on this domain) or a service like Branch/Firebase Dynamic Links,
+    // neither of which exist yet. So downloading is its own button above.
+    openLink(`whoscalledgrandma://join/${memberId}`).catch(() => {
       notify(
         "Couldn't open the app",
         "Make sure Who's Called Grandma? is installed, then try this link again.",
@@ -197,21 +231,68 @@ export default function InviteLandingScreen() {
               )}
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleOpenApp}
-              style={{
-                backgroundColor: "#241E38",
-                borderRadius: 14,
-                paddingVertical: 18,
-                marginTop: 24,
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "700" }}>
-                Open the app to join
-              </Text>
-            </Pressable>
+            {storeUrl ? (
+              <>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={handleDownload}
+                  style={{
+                    backgroundColor: "#241E38",
+                    borderRadius: 14,
+                    paddingVertical: 18,
+                    marginTop: 24,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "700" }}>
+                    Download the app
+                  </Text>
+                </Pressable>
+                <Text
+                  style={{
+                    color: "#29486E",
+                    fontSize: 13,
+                    textAlign: "center",
+                    marginTop: 12,
+                    lineHeight: 18,
+                  }}
+                >
+                  Once it&apos;s installed, come back to this link and tap below.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleOpenApp}
+                  style={{
+                    borderColor: "#241E38",
+                    borderWidth: 1.5,
+                    borderRadius: 14,
+                    paddingVertical: 16,
+                    marginTop: 12,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ color: "#241E38", fontSize: 17, fontWeight: "700" }}>
+                    Open the app to join
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={handleOpenApp}
+                style={{
+                  backgroundColor: "#241E38",
+                  borderRadius: 14,
+                  paddingVertical: 18,
+                  marginTop: 24,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "700" }}>
+                  Open the app to join
+                </Text>
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               onPress={handleNotYou}

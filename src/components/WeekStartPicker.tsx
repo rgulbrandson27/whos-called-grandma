@@ -18,11 +18,13 @@ function CalendarBadge({
   selected,
   onPress,
   accessibilityLabel,
+  size = SIZE,
 }: {
   lines: [string, string];
   selected: boolean;
   onPress: () => void;
   accessibilityLabel: string;
+  size?: number;
 }) {
   const color = selected ? ACTIVE : GRAY;
   return (
@@ -37,7 +39,7 @@ function CalendarBadge({
         paddingHorizontal: 6,
       }}
     >
-      <Svg width={SIZE} height={SIZE} viewBox="0 0 100 100">
+      <Svg width={size} height={size} viewBox="0 0 100 100">
         {/* the two binding tabs */}
         <Path d="M32 8v18M68 8v18" stroke={color} strokeWidth={selected ? 5 : 2.5} strokeLinecap="round" />
         {/* the body */}
@@ -70,9 +72,11 @@ function CalendarBadge({
 export function WeekStartPicker({
   value,
   onChange,
+  compact = false,
 }: {
   value: WeekStart;
   onChange: (value: WeekStart) => void;
+  compact?: boolean;
 }) {
   return (
     <View
@@ -80,14 +84,16 @@ export function WeekStartPicker({
       className="mt-2 mb-8 rounded-2xl px-4 py-4"
       style={{ backgroundColor: CONTAINER_FILL, borderWidth: 1.5, borderColor: "rgba(36, 36, 40, 0.3)" }}
     >
-      <View className="flex-row items-center justify-center" style={{ gap: 24 }}>
+      <View className="flex-row items-center justify-center" style={{ gap: compact ? 12 : 24 }}>
         <CalendarBadge
+          size={compact ? 88 : SIZE}
           lines={["Sunday", "Start"]}
           selected={value === "sunday"}
           onPress={() => onChange("sunday")}
           accessibilityLabel="Sunday start"
         />
         <CalendarBadge
+          size={compact ? 88 : SIZE}
           lines={["Monday", "Start"]}
           selected={value === "monday"}
           onPress={() => onChange("monday")}

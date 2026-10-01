@@ -67,7 +67,7 @@ export default function LovedOneBirthdayScreen() {
         style={{ top: insets.top + 8, left: 16, width: 48, height: 48 }}
       >
         <Svg width={30} height={30} viewBox="0 0 24 24" accessible={false}>
-          <Path d="M20 12H4M11 5l-7 7 7 7" fill="none" stroke="#241E38" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M20 12H4M11 5l-7 7 7 7" fill="none" stroke="#29486E" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       </Pressable>
       <View className="flex-1">
@@ -120,7 +120,7 @@ export default function LovedOneBirthdayScreen() {
         disabled={!picked}
         accessibilityState={{ disabled: !picked }}
         onPress={handleContinue}
-        className={`w-4/5 max-w-xs self-center items-center rounded-lg py-4 ${picked ? "bg-[#241E38] active:opacity-80" : "bg-tile"}`}
+        className={`w-4/5 max-w-xs min-h-[60px] shrink-0 self-center items-center justify-center rounded-lg py-4 ${picked ? "bg-ink active:opacity-80" : "bg-tile"}`}
       >
         <Text className={`text-xl font-semibold ${picked ? "text-white" : "text-graphite/50"}`}>Continue</Text>
       </Pressable>
@@ -130,7 +130,7 @@ export default function LovedOneBirthdayScreen() {
         onPress={handleSkip}
         className="self-center mt-4 mb-10 px-4 py-2 active:opacity-60"
       >
-        <Text className="text-[#241E38] text-base underline">Skip for Now</Text>
+        <Text className="text-ink text-base underline">Skip for Now</Text>
       </Pressable>
     </View>
   );

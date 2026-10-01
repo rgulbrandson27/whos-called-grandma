@@ -1,3 +1,4 @@
+import { setupStep, setupError } from "@/utils/setup-errors";
 import { supabase } from "./supabaseClient";
 import { toE164 } from "@/utils/phone";
 import type { InviteStatus } from "@/store/onboarding-store";
@@ -14,19 +15,19 @@ type InviteDraft = {
 // out the circle's existing non-subscriber rows first and reinserts the
 // current set — safe to call again each time the draft changes.
 export async function saveInviteMembers(circleId: string, draft: InviteDraft) {
-  const { error: deleteError } = await supabase
+  const { error: deleteError } = await setupStep("Invite deletion", () => supabase
     .from("circle_members")
     .delete()
     .eq("circle_id", circleId)
-    .neq("role", "owner");
-  if (deleteError) throw deleteError;
+    .neq("role", "owner"));
+  if (deleteError) throw setupError("Invite deletion", deleteError);
 
   const rows = draft.inviteNames
     .map((name, i) => ({
       name: name.trim(),
       phone: draft.invitePhones[i]?.trim() ?? "",
       color: draft.inviteColors[i] ?? null,
-      status: draft.inviteStatuses[i],
+      status: draft.inviteStatuses[i] === "not_sent" ? "pending" : draft.inviteStatuses[i],
     }))
     .filter((invite) => invite.name.length > 0)
     .map((invite) => ({
@@ -45,6 +46,6 @@ export async function saveInviteMembers(circleId: string, draft: InviteDraft) {
 
   if (rows.length === 0) return;
 
-  const { error: insertError } = await supabase.from("circle_members").insert(rows);
-  if (insertError) throw insertError;
+  const { error: insertError } = await setupStep("Invite insertion", () => supabase.from("circle_members").insert(rows));
+  if (insertError) throw setupError("Invite insertion", insertError);
 }

@@ -17,8 +17,8 @@ export const TIERS: Record<
   basic: {
     label: "Basic",
     monthly: 2.99,
-    annual: 20.99,
-    annualDiscount: "Save 40%",
+    annual: 19.99,
+    annualDiscount: "Save 45%",
     features: [
       "Up to 6 people in your circle",
       "Shared family calendar",
@@ -28,7 +28,7 @@ export const TIERS: Record<
   premium: {
     label: "Premium",
     monthly: 5.99,
-    annual: 35.99,
+    annual: 34.99,
     annualDiscount: "Save 50%",
     features: [
       "Up to 20 people in your circle",

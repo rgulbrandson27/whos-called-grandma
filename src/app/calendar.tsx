@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useFonts } from "expo-font";
 import { ActivityIndicator, FlatList, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import Svg, { Circle, Path } from "react-native-svg";
 import CalendarGrid from "@/components/Calendar/CalendarGrid";
 import MonthLabel from "@/components/Calendar/MonthLabel";
@@ -26,12 +26,14 @@ type MonthItem = { key: string; year: number; monthIndex: number; height: number
 
 function CalendarWindow({
   rowHeight,
+  weekStart,
   pastMonths,
   futureMonths,
   events,
   members,
 }: {
   rowHeight: number;
+  weekStart: "sunday" | "monday";
   pastMonths: number;
   futureMonths: number;
   events: CalendarEvent[];
@@ -46,17 +48,18 @@ function CalendarWindow({
       const date = new Date(today.getFullYear(), today.getMonth() + index - pastMonths, 1);
       const year = date.getFullYear();
       const monthIndex = date.getMonth();
-      const height = buildMonthCells(year, monthIndex).length / 7 * rowHeight + DIVIDER_HEIGHT;
+      const height = buildMonthCells(year, monthIndex, weekStart).length / 7 * rowHeight + DIVIDER_HEIGHT;
       const item = { key: `${year}-${monthIndex}`, year, monthIndex, height, offset };
       offset += height;
       return item;
     });
-  }, [rowHeight, today, pastMonths, futureMonths]);
+  }, [rowHeight, today, pastMonths, futureMonths, weekStart]);
   const viewportHeight = rowHeight * VISIBLE_WEEKS + DIVIDER_HEIGHT;
   const lastMonth = months[months.length - 1];
   const maxOffset = lastMonth.offset + lastMonth.height - viewportHeight;
   const currentMonth = months[pastMonths];
-  const todayWeek = Math.floor((new Date(currentMonth.year, currentMonth.monthIndex, 1).getDay() + today.getDate() - 1) / 7);
+  const firstWeekday = (new Date(currentMonth.year, currentMonth.monthIndex, 1).getDay() + (weekStart === "monday" ? 6 : 0)) % 7;
+  const todayWeek = Math.floor((firstWeekday + today.getDate() - 1) / 7);
   // Center the actual row, including the space taken by month dividers.
   const initialOffset = Math.max(0, Math.min(maxOffset,
     currentMonth.offset + DIVIDER_HEIGHT + (todayWeek + 0.5) * rowHeight - viewportHeight / 2,
@@ -76,7 +79,7 @@ function CalendarWindow({
 
   return (
     <View style={{ width: rowHeight * 7 }}>
-      <WeekdayHeader />
+      <WeekdayHeader weekStart={weekStart} />
       <View {...pan.panHandlers} style={{ height: viewportHeight, overflow: "hidden" }}>
         <FlatList
           ref={list}
@@ -108,6 +111,7 @@ function CalendarWindow({
                 <MonthLabel monthIndex={item.monthIndex} year={item.year} />
               </View>
               <CalendarGrid
+                  weekStart={weekStart}
                   year={item.year} monthIndex={item.monthIndex} rowHeight={rowHeight}
                   events={events} members={members}
                   onDayPress={(date) => router.push({ pathname: "/day/[date]", params: { date: formatDateKey(date.getFullYear(), date.getMonth(), date.getDate()) } })}
@@ -134,6 +138,7 @@ function CalendarWindow({
 export default function HomeScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const myMemberId = useOnboardingStore((state) => state.myMemberId);
   const circleId = useOnboardingStore((state) => state.circleId);
 
   const [members, setMembers] = useState<Member[] | null>(null);
@@ -142,22 +147,26 @@ export default function HomeScreen() {
   const [lovedOneName, setLovedOneName] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!circleId) {
       setLoadError("No circle found for this device.");
       return;
     }
+    let active = true;
     Promise.all([getCircleSummary(circleId), getMembers(circleId), getEvents(circleId)])
       .then(([summary, memberRows, eventRows]) => {
+        if (!active) return;
+        setLoadError(null);
         setTier(summary.plan.split("_")[0] as PlanTier);
         setLovedOneName(summary.lovedOneName);
         setMembers(memberRows);
         setEvents(eventRows);
       })
-      .catch((e) =>
-        setLoadError(e instanceof Error ? e.message : "Couldn't load your circle."),
-      );
-  }, [circleId]);
+      .catch((e) => {
+        if (active) setLoadError(e instanceof Error ? e.message : "Couldn't load your circle.");
+      });
+    return () => { active = false; };
+  }, [circleId]));
 
   const [fontsLoaded, fontError] = useFonts({
     CaveatRegular: require("../../assets/fonts/Caveat-Regular.ttf"),
@@ -171,6 +180,7 @@ export default function HomeScreen() {
     (usableHeight * 0.8 - 100 - WEEKDAY_HEADER_HEIGHT - DIVIDER_HEIGHT) / VISIBLE_WEEKS,
   ));
   const monthRange = monthRangeForTier(tier);
+  const weekStart = members?.find((member) => member.id === myMemberId)?.weekStart ?? "sunday";
 
   return (
     <View className="flex-1 bg-country" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
@@ -225,8 +235,9 @@ export default function HomeScreen() {
           )}
           <View className="items-center" style={{ marginTop: usableHeight * 0.03 }}>
             <CalendarWindow
-              key={`${rowHeight}-${monthRange}`}
+              key={`${rowHeight}-${monthRange}-${weekStart}`}
               rowHeight={rowHeight}
+              weekStart={weekStart}
               pastMonths={monthRange}
               futureMonths={monthRange}
               events={events}

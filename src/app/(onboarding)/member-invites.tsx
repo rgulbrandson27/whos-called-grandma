@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useFonts } from "expo-font";
 import { router } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, Share, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MemberIdentifier from "@/components/MemberIdentifier";
 import type { Member } from "@/data/fakeData";
 import { getMembers } from "@/data/members";
 import { useOnboardingStore } from "@/store/onboarding-store";
-import { getInviteUrl } from "@/utils/invite-link";
+import { sendInvite } from "@/utils/invite-link";
 import { possessive } from "@/utils/text";
 
 const GRAY_AVATAR = "#9AA5B1";
@@ -16,6 +16,8 @@ export default function MemberInvitesScreen() {
   const insets = useSafeAreaInsets();
   const circleId = useOnboardingStore((state) => state.circleId);
   const lovedOneName = useOnboardingStore((state) => state.lovedOneName).trim();
+  const sentInviteIds = useOnboardingStore((state) => state.sentInviteIds) ?? [];
+  const markInviteSent = useOnboardingStore((state) => state.markInviteSent);
   const [members, setMembers] = useState<Member[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fontsLoaded, fontError] = useFonts({
@@ -46,13 +48,24 @@ export default function MemberInvitesScreen() {
   const others = members?.filter((m) => m.role !== "owner") ?? [];
 
   const handleSendInvite = (member: Member) => {
-    const url = getInviteUrl(member.id);
-    Share.share({
-      message: `You're invited to ${lovedOneName ? possessive(lovedOneName) : "our"} circle on Who's Called Grandma! Tap to join: ${url}`,
-      url,
-    }).catch(() => {
-      Alert.alert("Couldn't open share sheet", "Please try again.");
-    });
+    sendInvite(member, lovedOneName)
+      .then((sent) => {
+        if (sent) markInviteSent(member.id);
+      })
+      .catch(() => {
+        Alert.alert("Couldn't send the invite", "Please try again.");
+      });
+  };
+
+  const handleResendInvite = (member: Member) => {
+    Alert.alert(
+      "Invite pending",
+      `${member.name} hasn't joined yet. Send the invite again?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Send again", onPress: () => handleSendInvite(member) },
+      ],
+    );
   };
 
   return (
@@ -88,7 +101,7 @@ export default function MemberInvitesScreen() {
       )}
 
       {members && (
-        <View className="flex-1 px-6 mt-8" style={{ gap: 10 }}>
+        <ScrollView className="flex-1 px-6 mt-8" contentContainerStyle={{ gap: 10, paddingBottom: 16 }}>
           {owner && (
             <View className="flex-row items-center rounded-2xl bg-white/60 px-4 py-3">
               <MemberIdentifier color={owner.color ?? GRAY_AVATAR} size={40} />
@@ -114,22 +127,37 @@ export default function MemberInvitesScreen() {
                   {member.phone?.trim() || "No number saved"}
                 </Text>
               </View>
-              {member.inviteStatus === "pending" && (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => handleSendInvite(member)}
-                  className="rounded-full bg-ink px-3 py-1.5 active:opacity-80"
-                >
-                  <Text className="text-white text-xs font-semibold">
-                    Send invite
-                  </Text>
-                </Pressable>
-              )}
+              {member.inviteStatus === "pending" &&
+                (sentInviteIds.includes(member.id) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Invite pending for ${member.name}. Send again`}
+                    onPress={() => handleResendInvite(member)}
+                    className="rounded-full bg-graphite/10 px-3 py-1.5 active:opacity-60"
+                  >
+                    <Text className="text-graphite/70 text-xs font-semibold">
+                      Pending
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => handleSendInvite(member)}
+                    className="rounded-full bg-ink px-3 py-1.5 active:opacity-80"
+                  >
+                    <Text className="text-white text-xs font-semibold">
+                      Send invite
+                    </Text>
+                  </Pressable>
+                ))}
             </View>
           ))}
-        </View>
+        </ScrollView>
       )}
 
+      <Text className="text-graphite/70 text-sm text-center px-6 my-3">
+        You can add or remove people anytime from Settings → View &amp; edit my circle.
+      </Text>
       <Pressable
         accessibilityRole="button"
         onPress={() => router.replace("/calendar")}

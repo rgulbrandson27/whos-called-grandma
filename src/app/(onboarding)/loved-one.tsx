@@ -63,7 +63,7 @@ export default function LovedOneScreen() {
         style={{ top: insets.top + 8, left: 16, width: 48, height: 48, zIndex: 1 }}
       >
         <Svg width={30} height={30} viewBox="0 0 24 24" accessible={false}>
-          <Path d="M20 12H4M11 5l-7 7 7 7" fill="none" stroke="#241E38" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M20 12H4M11 5l-7 7 7 7" fill="none" stroke="#29486E" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       </Pressable>
       <ScrollView
@@ -116,7 +116,7 @@ export default function LovedOneScreen() {
         onSubmitEditing={handleContinue}
         underlineColorAndroid="transparent"
         selectionColor="#F5D779"
-        className="w-full max-w-md self-center mt-14 border-b border-ink/50 text-ink text-center web:outline-none"
+        className="w-full max-w-md self-center mt-14 border-b-[1.5px] border-ink/50 text-ink text-center web:outline-none"
         style={{ fontSize: name || isFocused ? 52 : 28, height: 68, paddingTop: 10, paddingBottom: 2, includeFontPadding: false, textAlignVertical: "center" }}
       />
       {limitExceeded && (
@@ -130,7 +130,7 @@ export default function LovedOneScreen() {
         disabled={!canContinue}
         accessibilityState={{ disabled: !canContinue }}
         onPress={handleContinue}
-        className={`self-center items-center rounded-lg py-3 mt-6 ${canContinue ? "bg-[#241E38] active:opacity-80" : "bg-tile"}`}
+        className={`self-center items-center rounded-lg py-3 mt-6 ${canContinue ? "bg-ink active:opacity-80" : "bg-tile"}`}
         style={{ width: 96 }}
       >
         <Svg width={28} height={28} viewBox="0 0 24 24" accessible={false}>
@@ -143,7 +143,7 @@ export default function LovedOneScreen() {
         disabled={!canContinue}
         accessibilityState={{ disabled: !canContinue }}
         onPress={handleContinue}
-        className={`w-4/5 max-w-xs self-center items-center rounded-lg py-4 mb-12 ${canContinue ? "bg-[#241E38] active:opacity-80" : "bg-tile"}`}
+        className={`w-4/5 max-w-xs self-center items-center rounded-lg py-4 mb-12 ${canContinue ? "bg-ink active:opacity-80" : "bg-tile"}`}
       >
         <Text className={`text-xl font-semibold ${canContinue ? "text-white" : "text-graphite/50"}`}>Continue</Text>
       </Pressable>}
